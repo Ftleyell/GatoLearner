@@ -1,0 +1,3262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Preguntas Dinámico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* CSS Variables for dynamic styling */
+            --flare-intensity: 0; /* Controls the intensity of the score text 'flare' effect */
+            /* --cat-size: 45px; /* Default size - Now managed more dynamically */
+            --combo-font-size: 1.5rem; /* Default font size for combo counter */
+            --element-glow-intensity: 0; /* Variable for element glow */
+        }
+        body {
+            font-family: 'Poppins', sans-serif;
+            transition: background-color 0.8s ease-in-out;
+            overflow: hidden;
+            position: relative;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #111827;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        #score-area {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            min-height: 4rem;
+            margin-bottom: 0.5rem;
+        }
+        #score-container {
+             position: relative;
+             display: inline-flex;
+             align-items: center;
+             gap: 0.5rem;
+             z-index: 22;
+        }
+        #score {
+            transition: color 0.5s ease, font-weight 0.5s ease, text-shadow 0.6s ease-out;
+            font-size: 2.5rem;
+            font-weight: 800;
+            text-shadow:
+                0 0 5px hsla(0, 0%, 100%, 0),
+                0 0 10px hsla(50, 100%, 50%, 0),
+                0 0 15px hsla(30, 100%, 50%, 0),
+                0 0 20px hsla(0, 100%, 50%, 0);
+            position: relative;
+            color: #f3f4f6;
+        }
+        .score-emoji {
+            font-size: 1.8rem;
+            line-height: 1;
+        }
+        #combo-counter {
+            position: fixed;
+            bottom: 1rem;
+            left: 1rem;
+            transform: none;
+            transform-origin: bottom left;
+            font-size: var(--combo-font-size);
+            font-weight: 900;
+            transition: font-size 0.4s cubic-bezier(0.22, 1, 0.36, 1), color 0.4s ease-out;
+            text-shadow: 1px 1px 5px rgba(0,0,0,0.5);
+            z-index: 5;
+            white-space: nowrap;
+            display: none;
+            pointer-events: none;
+            /* Color set by JS */
+        }
+        .game-container {
+            border-radius: 1.5rem;
+            padding: 0 2.5rem;
+            z-index: 20;
+            position: relative;
+            width: 90%;
+            max-width: 600px;
+            pointer-events: none;
+        }
+        .game-container > * {
+            pointer-events: auto;
+        }
+        #question-box {
+            background-color: rgba(17, 24, 39, 0.85);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.4),
+                        0 0 calc(var(--element-glow-intensity) * 18px) calc(var(--element-glow-intensity) * 4px) hsla(50, 100%, 60%, calc(var(--element-glow-intensity) * 0.6));
+            min-height: 5em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: box-shadow 0.5s ease-out;
+        }
+        #question {
+            font-size: 1.25rem;
+            font-weight: 600;
+            line-height: 1.6;
+            color: #e5e7eb;
+        }
+        #options {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .option-button {
+            background-image: linear-gradient(to right, #3b82f6, #2563eb);
+            color: white;
+            font-weight: 600;
+            padding: 0.9rem 1rem;
+            border-radius: 0.75rem;
+            text-align: center;
+            transition: background-image 0.3s ease, transform 0.2s ease, box-shadow 0.5s ease-out;
+            cursor: pointer;
+            border: none;
+            width: 100%;
+            min-height: 3.2em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.4;
+            word-break: break-word;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2),
+                        0 0 calc(var(--element-glow-intensity) * 12px) calc(var(--element-glow-intensity) * 3px) hsla(50, 100%, 60%, calc(var(--element-glow-intensity) * 0.5));
+        }
+        .option-button:hover {
+            background-image: linear-gradient(to right, #60a5fa, #3b82f6);
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3),
+                        0 0 calc(var(--element-glow-intensity) * 12px) calc(var(--element-glow-intensity) * 3px) hsla(50, 100%, 60%, calc(var(--element-glow-intensity) * 0.5));
+        }
+        .option-button:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.5),
+                        0 0 calc(var(--element-glow-intensity) * 12px) calc(var(--element-glow-intensity) * 3px) hsla(50, 100%, 60%, calc(var(--element-glow-intensity) * 0.5));
+        }
+        .option-button:disabled {
+            background-image: linear-gradient(to right, #9ca3af, #6b7280);
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1),
+                        0 0 calc(var(--element-glow-intensity) * 12px) calc(var(--element-glow-intensity) * 3px) hsla(50, 100%, 60%, calc(var(--element-glow-intensity) * 0.5));
+        }
+
+        #feedback { min-height: 2rem; font-weight: 700; font-size: 1.1rem; }
+
+        @keyframes pulseFlare {
+             0%, 100% { text-shadow: var(--flare-shadow); opacity: 1; }
+             50% { text-shadow: var(--flare-shadow-pulse); opacity: 0.85; }
+        }
+        .score-pulsing { animation: pulseFlare 1.5s infinite ease-in-out; }
+
+        #image-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background-color: rgba(0, 0, 0, 0.7); display: none; opacity: 0;
+            transition: opacity 0.3s ease-in-out; z-index: 100;
+            justify-content: center; align-items: center; pointer-events: none;
+        }
+        #pexels-image {
+            max-width: 90%; max-height: 90%; width: auto; height: auto;
+            object-fit: contain; border-radius: 0.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: none;
+        }
+
+        #explanation-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            display: none; opacity: 0; background-color: rgba(0, 0, 0, 0.85);
+            justify-content: center; align-items: center; text-align: center;
+            z-index: 101; transition: opacity 0.4s ease-in-out;
+            cursor: pointer; padding: 2rem; box-sizing: border-box;
+        }
+        #explanation-overlay.visible { display: flex; opacity: 1; pointer-events: auto; }
+        #explanation-text-content {
+            color: white; font-size: 1.75rem; line-height: 1.6; font-weight: 600;
+            max-width: 80%; text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+        }
+
+        #cat-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10; /* Cats above combo */
+            pointer-events: none; overflow: hidden;
+        }
+        .cat {
+            position: absolute; /* width/height set dynamically */
+            border-radius: 50%;
+            box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), 1px 1px 3px rgba(0,0,0,0.2);
+            will-change: transform, box-shadow, width, height; /* Optimize */
+            background-size: cover;
+            background-position: center; background-color: #ccc;
+            transform-origin: center center;
+            transition: box-shadow 0.3s ease-out, width 0.3s ease-out, height 0.3s ease-out; /* Add size transition */
+            cursor: grab;
+            pointer-events: auto;
+        }
+        .cat:active { cursor: grabbing; }
+        .cat::before { content: ''; }
+
+        /* Glow styles remain the same */
+        .glow-gray { box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), 1px 1px 3px rgba(0,0,0,0.2), 0 0 10px 4px rgba(180, 180, 180, 0.7); }
+        .glow-green { box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), 1px 1px 3px rgba(0,0,0,0.2), 0 0 12px 5px rgba(0, 255, 0, 0.7); }
+        .glow-blue { box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), 1px 1px 3px rgba(0,0,0,0.2), 0 0 12px 5px rgba(0, 150, 255, 0.7); }
+        .glow-violet { box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), 1px 1px 3px rgba(0,0,0,0.2), 0 0 14px 6px rgba(180, 0, 255, 0.65); }
+        .glow-orange { box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), 1px 1px 3px rgba(0,0,0,0.2), 0 0 15px 7px rgba(255, 140, 0, 0.7); }
+
+        #score-pulse {
+            position: absolute; left: 50%; top: 50%; width: 1px; height: 1px;
+            border-radius: 50%; background-color: rgba(255, 255, 255, 0.7);
+            transform: translate(-50%, -50%) scale(0); opacity: 0;
+            z-index: 21; pointer-events: none;
+        }
+
+        @keyframes scorePulseAnimation {
+             0% { transform: translate(-50%, -50%) scale(0.1); opacity: 0.7; }
+             70% { transform: translate(-50%, -50%) scale(3); opacity: 0.3; }
+             100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+        }
+        .pulsing { animation: scorePulseAnimation 0.5s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+
+    <span id="combo-counter"></span>
+
+    <div id="cat-container"></div>
+
+    <div class="game-container text-center">
+         <div class="mb-4">
+             <div id="score-area">
+                 <div id="score-container">
+                     <span class="score-emoji">⭐</span>
+                     <span id="score" class="font-black text-gray-100">0</span>
+                     <div id="score-pulse"></div>
+                 </div>
+             </div>
+         </div>
+         <div id="question-box">
+              <p id="question" class="text-xl font-semibold">Cargando pregunta...</p>
+         </div>
+         <div id="options" class="flex flex-col gap-3 mb-3">
+             </div>
+         <div id="feedback" class="mt-4 text-lg h-8"></div>
+    </div>
+
+    <div id="image-overlay">
+        <img id="pexels-image" src="" alt="Imagen Aleatoria de Pexels" onerror="this.style.display='none'; console.error('Failed to load Pexels image URL (img onerror):', this.src, 'Event:', event)">
+    </div>
+
+    <div id="explanation-overlay">
+        <p id="explanation-text-content"></p>
+    </div>
+
+
+    <script>
+        // --- Matter.js Aliases ---
+        const { Engine, Render, Runner, World, Bodies, Body, Composite, Events, Vector, Mouse, MouseConstraint } = Matter;
+
+        // --- Configuration Constants ---
+        const PEXELS_API_KEY = 'OXfrEVqHQYtO1wAcMEMIqg7sWQW1n0fcqxp2B7BtiWDazA9S2GHMLTin'; // <--- VERIFY THIS KEY!!!
+        const PEXELS_FUNNY_URL = 'https://api.pexels.com/v1/search?query=funny&per_page=30';
+        const PEXELS_CATFACE_URL = 'https://api.pexels.com/v1/search?query=cat+face&per_page=80';
+        const IMAGE_DISPLAY_DURATION = 2500;
+        const IMAGE_FADE_OUT_DURATION = 500;
+        const EXPLANATION_FADE_OUT_DURATION = 400;
+        const INITIAL_CAT_SIZE = 45; // Renamed from CAT_SIZE
+        const MAX_CATS = 50;
+        const SHOCKWAVE_STRENGTH = 0.020;
+        const SHOCKWAVE_MIN_DISTANCE = 30;
+        const MAX_WORLD_SHAKE = 0.4;
+        const SCORE_SHAKE_FACTOR = 0.0008;
+        const SHAKE_FORCE_MAGNITUDE = 0.001;
+        const GLOW_CHANCE = 0.25;
+        const GLOW_COLOR_PROBABILITIES = { gray: 0.40, green: 0.25, blue: 0.15, violet: 0.12, orange: 0.08 };
+        const COMBO_BASE_FONT_SIZE_REM = 3.0;
+        const COMBO_FONT_INCREMENT_REM = 0.5;
+        const COMBO_HUE_INCREMENT = 35;
+        const CAT_CATEGORY = 0x0002;
+        const ELEMENT_GLOW_START_STREAK = 2;
+        const ELEMENT_GLOW_MAX_STREAK = 10;
+        // NEW: Cat Eating Mechanics Config
+        const CAT_GROWTH_FACTOR = 1.15; // How much bigger the cat gets (15%)
+        const MAX_CAT_SIZE = 150; // Optional: Maximum size a cat can reach
+        // NEW: Rarity mapping
+        const CAT_RARITY = {
+            'none': 0,
+            'glow-gray': 1,
+            'glow-green': 2,
+            'glow-blue': 3,
+            'glow-violet': 4,
+            'glow-orange': 5
+        };
+
+
+    // --- Sample Questions (New Format) ---
+    const questions = [
+    {
+      "id": 1,
+      "question": "Según las fuentes, ¿qué factor incide significativamente en la elección y dosificación de fármacos en psicofarmacología infantojuvenil?",
+      "options": [
+        {"a": "La preferencia de los padres"},
+        {"b": "Las diferencias metabólicas y de desarrollo"},
+        {"c": "El tipo de seguro médico"},
+        {"d": "La disponibilidad de formulaciones líquidas"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Las fuentes indican específicamente que existen diferencias metabólicas y de desarrollo que inciden en la elección de los fármacos y en su dosificación en la población infantojuvenil."
+    },
+    {
+      "id": 2,
+      "question": "En psicofarmacología infantojuvenil, las dosis de los fármacos suelen ser similares a las de adultos porque:",
+      "options": [
+        {"a": "Los niños tienen un volumen corporal mayor"},
+        {"b": "Las sustancias se metabolizan más rápido y se unen menos a los receptores blanco"},
+        {"c": "Sus sistemas de neurotransmisores están completamente desarrollados"},
+        {"d": "Es más sencillo para la prescripción médica"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Las fuentes explican que, aunque se metabolizan más rápido, se unen menos a los receptores blanco, dejando más fármaco circulante, lo que lleva a dosis usualmente similares a las de adultos."
+    },
+    {
+      "id": 3,
+      "question": "¿Qué aspecto del uso de psicofármacos en población infantojuvenil carece de demasiada evidencia según las fuentes?",
+      "options": [
+        {"a": "Su mecanismo de acción"},
+        {"b": "Sus impactos a largo plazo (cerebral, comportamental, fisiológico)"},
+        {"c": "Su efectividad en síntomas agudos"},
+        {"d": "La dosis efectiva mínima"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Las fuentes señalan que no existen demasiadas evidencias sobre sus impactos a largo plazo a nivel cerebral, comportamental y fisiológico."
+    },
+    {
+      "id": 4,
+      "question": "¿Cuál de los siguientes síntomas se relaciona con el TOC y una educación muy estricta o códigos morales rígidos según las fuentes?",
+      "options": [
+        {"a": "Coleccionismo"},
+        {"b": "Necesidad de simetría"},
+        {"c": "Escrupulosidad"},
+        {"d": "Comportamientos motores anormales"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La escrupulosidad, definida como la necesidad de confesar pecados inexistentes o mínimos, se relaciona con una educación muy estricta o códigos morales rígidos."
+    },
+    {
+      "id": 5,
+      "question": "La acumulación de objetos inútiles hasta cubrir o abarrotar habitaciones se describe en las fuentes como parte de:",
+      "options": [
+        {"a": "Trastorno de Acaparamiento"},
+        {"b": "Coleccionismo en el TOC"},
+        {"c": "Necesidad de precisión"},
+        {"d": "Deterioro Cognitivo Leve"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Las fuentes mencionan el coleccionismo como parte del TOC, describiéndolo como la acumulación de objetos inútiles que pueden abarrotar habitaciones."
+    },
+    {
+      "id": 6,
+      "question": "La necesidad de simetría y precisión, que lleva a colocar objetos de manera simétrica o hacer/deshacer ciertas acciones motoras de manera exacta, es un síntoma de:",
+      "options": [
+        {"a": "Trastorno de Pánico"},
+        {"b": "Trastorno de Ansiedad Generalizada"},
+        {"c": "Trastorno Obsesivo-Compulsivo (TOC)"},
+        {"d": "Trastorno Límite de la Personalidad"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las fuentes describen la necesidad de simetría y precisión como un síntoma característico del TOC."
+    },
+    {
+      "id": 7,
+      "question": "Según las fuentes, las compulsiones en el TOC se describen como:",
+      "options": [
+        {"a": "Pensamientos intrusivos y recurrentes"},
+        {"b": "Miedos irracionales e intensos"},
+        {"c": "Actos a los que el sujeto recurre de manera rígida para intentar aliviar sus obsesiones"},
+        {"d": "Patrones de evitación de situaciones sociales"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las compulsiones son definidas como 'pensamientos a los que el sujeto recurre y cumple de una manera rígida y formal para intentar aliviar sus obsesiones' o 'actos mentales (p. ej. sumar matrículas, rezar, repetir palabras) de carácter recurrente, cuyo propósito es prevenir o atenuar (como en un exorcismo) la ansiedad o el malestar'. La opción C captura la esencia de un acto realizado de forma rígida para aliviar la ansiedad."
+    },
+    {
+      "id": 8,
+      "question": "¿Cuál es la prevalencia estimada del TOC en la población general según las fuentes?",
+      "options": [
+        {"a": "1.5%"},
+        {"b": "5%"},
+        {"c": "10%"},
+        {"d": "2.5%"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Las fuentes indican que la prevalencia del TOC en la población general es del 2.5%."
+    },
+    {
+      "id": 9,
+      "question": "Según las fuentes, ¿a qué edad suele comenzar el TOC?",
+      "options": [
+        {"a": "Adolescencia temprana (12-15 años)"},
+        {"b": "20 años"},
+        {"c": "30 años"},
+        {"d": "Infancia"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Las fuentes mencionan que la edad de comienzo típica del TOC es a los 20 años."
+    },
+    {
+      "id": 10,
+      "question": "¿Cuál de los siguientes trastornos es mencionado como una comorbilidad frecuente del TOC en las fuentes?",
+      "options": [
+        {"a": "Trastorno Bipolar"},
+        {"b": "Esquizofrenia"},
+        {"c": "Trastorno por Déficit de Atención e Hiperactividad (TDAH)"},
+        {"d": "Anorexia Nerviosa"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Las fuentes listan la esquizofrenia, el trastorno depresivo mayor, trastornos de ansiedad, trastornos de personalidad, bulimia y anorexia como comorbilidades del TOC."
+    },
+    {
+      "id": 11,
+      "question": "El Trauma, según las fuentes, es producto de la exposición a:",
+      "options": [
+        {"a": "Dificultades en la socialización"},
+        {"b": "Pérdidas parentales tempranas"},
+        {"c": "Eventos de naturaleza grave o catastrófica"},
+        {"d": "Cambios hormonales en la adolescencia"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las fuentes definen el Trauma como la presencia de trastornos emocionales producto de la exposición a eventos de naturaleza grave o catastrófica."
+    },
+    {
+      "id": 12,
+      "question": "¿Cuál es la prevalencia estimada del TEPT (Trastorno de Estrés Postraumático) en mujeres según las fuentes?",
+      "options": [
+        {"a": "5%"},
+        {"b": "11%"},
+        {"c": "1.5%"},
+        {"d": "20%"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La prevalencia del TEPT es del 5% en hombres y 11% en mujeres, según las fuentes."
+    },
+    {
+      "id": 13,
+      "question": "¿Cuál de los siguientes es un efecto secundario de los antidepresivos tricíclicos mencionado en las fuentes?",
+      "options": [
+        {"a": "Aumento de la libido"},
+        {"b": "Síndrome Anticolinérgico Central"},
+        {"c": "Insomnio inicial"},
+        {"d": "Pérdida de peso"}
+      ],
+      "correct_answer": "b",
+      "explanation": "El Síndrome Anticolinérgico Central es listado como un efecto secundario de los antidepresivos tricíclicos."
+    },
+    {
+      "id": 14,
+      "question": "¿Qué clase de antidepresivos superó a los tricíclicos en frecuencia y magnitud de utilización a partir de mediados de los 80s?",
+      "options": [
+        {"a": "Inhibidores de la Monoamino Oxidasa (IMAO)"},
+        {"b": "Inhibidores Selectivos de la Recaptación de Serotonina (ISRS)"},
+        {"c": "Antidepresivos Duales (SNRI)"},
+        {"d": "Mirtazapina"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Las fuentes indican que, hasta mediados de los 80s, los tricíclicos eran la primera línea, pero en no más de 3 años, los ISRS se impusieron en frecuencia y magnitud de utilización."
+    },
+    {
+      "id": 15,
+      "question": "¿Cuál es el mecanismo de acción principal de los ISRS según las fuentes?",
+      "options": [
+        {"a": "Bloquean la recaptura de Noradrenalina"},
+        {"b": "Bloquean el transportador de Dopamina"},
+        {"c": "Bloquean el transportador de Serotonina"},
+        {"d": "Son agonistas directos del receptor GABA"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Todos los fármacos ISRS bloquean la recaptura del transportador de Serotonina en las neuronas serotoninérgicas."
+    },
+    {
+      "id": 16,
+      "question": "Además de bloquear el transportador de Serotonina, ¿qué otro efecto farmacológico promueven los ISRS según las fuentes?",
+      "options": [
+        {"a": "Aumento en el turnover de Noradrenalina"},
+        {"b": "Down-regulation / desensibilización del receptor Somatodendrítico 5-HT1A"},
+        {"c": "Bloqueo del receptor D2"},
+        {"d": "Activación del receptor GABAA"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Los ISRS promueven una down-regulation / desensibilización del receptor Somatodendrítico 5-HT1A."
+    },
+    {
+      "id": 17,
+      "question": "Según las fuentes, los ISRS son de primera elección para el tratamiento de depresiones leves y moderadas debido a:",
+      "options": [
+        {"a": "Su bajo costo"},
+        {"b": "Su mecanismo de acción rápido"},
+        {"c": "Su tolerancia, seguridad y eficacia"},
+        {"d": "La ausencia total de efectos secundarios"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los ISRS son de primera elección por su tolerancia, seguridad y eficacia en depresiones leves y moderadas."
+    },
+    {
+      "id": 18,
+      "question": "¿En qué vía cerebral actúan los ISRS para el tratamiento del Trastorno Obsesivo-Compulsivo (TOC) según las fuentes?",
+      "options": [
+        {"a": "Vía de la corteza Prefrontal"},
+        {"b": "Vía de los ganglios Basales"},
+        {"c": "Vía a la corteza límbica"},
+        {"d": "Vía al Hipotálamo"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Para el TOC, los ISRS actúan desinhibiendo la vía de los ganglios Basales."
+    },
+    {
+      "id": 19,
+      "question": "¿Qué ISRS se describe específicamente como 'Activador' en las fuentes, con un rango de dosis de 50-200 mg/día?",
+      "options": [
+        {"a": "Citalopram"},
+        {"b": "Escitalopram"},
+        {"c": "Sertralina"},
+        {"d": "Fluvoxamina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Sertralina se menciona como 'Activador' con la dosis indicada."
+    },
+    {
+      "id": 20,
+      "question": "¿Cuánto tiempo tarda habitualmente en iniciar la respuesta de la acción antiobsesiva de los ISRS según las fuentes?",
+      "options": [
+        {"a": "3-8 semanas"},
+        {"b": "6-9 meses"},
+        {"c": "12 a 26 semanas"},
+        {"d": "12 meses"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Para la acción antiobsesiva (TOC), la respuesta suele iniciarse al cabo de 12 a 26 semanas."
+    },
+    {
+      "id": 21,
+      "question": "Para la acción antiobsesiva de los ISRS, ¿cuál es la mejoría habitual esperada según las fuentes?",
+      "options": [
+        {"a": "Mayor al 50%"},
+        {"b": "Remisión completa"},
+        {"c": "Menos del 50%"},
+        {"d": "Desaparición total de las obsesiones"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La respuesta habitual en la acción antiobsesiva consiste en una mejoría menor del 50%."
+    },
+    {
+      "id": 22,
+      "question": "Según las fuentes, ¿qué puede ocurrir con los síntomas diana al inicio del tratamiento con ISRS?",
+      "options": [
+        {"a": "Desaparecer por completo"},
+        {"b": "Empeorar"},
+        {"c": "Mejorar significativamente"},
+        {"d": "No presentar cambios"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Al inicio, los síntomas diana pueden empeorar."
+    },
+    {
+      "id": 23,
+      "question": "¿Cuál de los siguientes es un efecto secundario frecuente de los ISRS mencionado en las fuentes?",
+      "options": [
+        {"a": "Aumento de peso"},
+        {"b": "Sequedad bucal"},
+        {"c": "Náuseas"},
+        {"d": "Hipotensión arterial"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Mareo, náuseas, letargia, temblores, parestesias, cefaleas, insomnio, sueños vívidos, dificultades de concentración, ansiedad y depresión son listados como efectos secundarios frecuentes de los ISRS."
+    },
+    {
+      "id": 24,
+      "question": "Según las fuentes, ¿qué factor puede aumentar el riesgo de efectos secundarios o escasa respuesta terapéutica con ISRS?",
+      "options": [
+        {"a": "Combinarlos con psicoterapia"},
+        {"b": "Utilizar ISRS de vida corta"},
+        {"c": "Seguir un tratamiento prolongado"},
+        {"d": "Tener una buena adherencia al tratamiento"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Utilizar ISRS de vida corta (paroxetina, venlafaxina) es un factor de riesgo para la presentación de efectos secundarios."
+    },
+    {
+      "id": 25,
+      "question": "¿Qué caracteriza a los antidepresivos de Inhibición Dual (SNRI) que surgieron en los 90s?",
+      "options": [
+        {"a": "Son antagonistas D2 y 5HT2"},
+        {"b": "Bloquean selectivamente la recaptura de Dopamina"},
+        {"c": "Añaden la inhibición de recaptura de noradrenalina a la de serotonina"},
+        {"d": "Son moduladores positivos del GABA"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los antidepresivos de Inhibición Dual (SNRI) que surgieron en los 90s añaden este efecto para la noradrenalina, a la acción de inhibición de recaptura de serotonina."
+    },
+    {
+      "id": 26,
+      "question": "Según las recomendaciones de Grupo Internacional de Consenso, ¿cuánto tiempo mínimo de tratamiento de continuación se recomienda para lograr la remisión en el Trastorno Depresivo Mayor?",
+      "options": [
+        {"a": "8 semanas"},
+        {"b": "6 meses"},
+        {"c": "12 meses"},
+        {"d": "5 años"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Se requiere un mínimo de 12 meses de tratamiento antidepresivo de continuación posterior a la respuesta para obtener un resultado exitoso."
+    },
+    {
+      "id": 27,
+      "question": "Mantener el tratamiento antidepresivo durante 6 a 9 meses tiene como resultado:",
+      "options": [
+        {"a": "La curación completa de la depresión"},
+        {"b": "Una disminución significativa de la incidencia de recaídas"},
+        {"c": "El aumento de peso del paciente"},
+        {"d": "La aparición de efectos secundarios tardíos"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Cuando el tratamiento antidepresivo se mantiene durante 6 a 9 meses, la incidencia de recaídas decrece significativamente."
+    },
+    {
+      "id": 28,
+      "question": "Según las fuentes, ¿qué elemento se considera 'imprescindible' en las viñetas terapéuticas para el manejo de trastornos mentales?",
+      "options": [
+        {"a": "La hospitalización"},
+        {"b": "Psicoterapia"},
+        {"c": "La combinación de tres o más fármacos"},
+        {"d": "El uso exclusivo de fármacos de última generación"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Las fuentes mencionan que la psicoterapia es imprescindible."
+    },
+    {
+      "id": 29,
+      "question": "¿Qué tipo de depresión ha dado lugar a la formulación de múltiples algoritmos de tratamiento?",
+      "options": [
+        {"a": "Depresión Leve"},
+        {"b": "Depresión Moderada"},
+        {"c": "Depresión Resistente"},
+        {"d": "Distimia"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El tratamiento de la Depresión Resistente ha dado lugar a la formulación de múltiples algoritmos."
+    },
+    {
+      "id": 30,
+      "question": "Según las fuentes, la depresión es una enfermedad crónica con altas posibilidades de:",
+      "options": [
+        {"a": "Remisión espontánea"},
+        {"b": "Transformación a trastorno bipolar"},
+        {"c": "Recurrencia"},
+        {"d": "Desarrollo de psicosis"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las fuentes concluyen que la depresión es una enfermedad crónica, con altas posibilidades de recurrencia."
+    },
+    {
+      "id": 31,
+      "question": "¿Qué factor se menciona como favorable para la adherencia del paciente al tratamiento antidepresivo a largo plazo?",
+      "options": [
+        {"a": "La edad del paciente"},
+        {"b": "El apoyo familiar"},
+        {"c": "La educación sobre el tratamiento"},
+        {"d": "La severidad inicial de los síntomas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La educación es un factor favorable para la adherencia del paciente al tratamiento a largo plazo."
+    },
+    {
+      "id": 32,
+      "question": "En la Fase I Presintomática de las demencias, ¿qué comienza a acumularse sin generar manifestaciones clínicas inmediatas?",
+      "options": [
+        {"a": "Neurotransmisores"},
+        {"b": "Placas amiloides"},
+        {"c": "Cuerpos de Lewy"},
+        {"d": "Células gliales"}
+      ],
+      "correct_answer": "b",
+      "explanation": "En la Fase I, comienza la acumulación de placas amiloides, que no generarán manifestaciones clínicas hasta alcanzar cierto umbral."
+    },
+    {
+      "id": 33,
+      "question": "¿Qué fase de las demencias se caracteriza por síntomas cognitivos leves y detectables, pero aún no demencia?",
+      "options": [
+        {"a": "Fase I: Presintomática"},
+        {"b": "Fase II: Deterioro Cognitivo Leve"},
+        {"c": "Fase III: Demencia"},
+        {"d": "Fase Terminal"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La Fase II se describe como Deterioro Cognitivo Leve, donde aparecen síntomas cognitivos leves y detectables, pero no demencia."
+    },
+    {
+      "id": 34,
+      "question": "¿Cuál es uno de los desafíos fundamentales en el estudio de la esquizofrenia infantojuvenil según las fuentes?",
+      "options": [
+        {"a": "Encontrar fármacos efectivos"},
+        {"b": "Emanciparse de los criterios que corresponden a adultos"},
+        {"c": "Lograr la adherencia al tratamiento"},
+        {"d": "Identificar los factores genéticos"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Emanciparse de los criterios que corresponden a adultos es uno de los desafíos fundamentales."
+    },
+    {
+      "id": 35,
+      "question": "¿Cuál de los siguientes es un signo o síntoma temprano de la esquizofrenia mencionado en las fuentes?",
+      "options": [
+        {"a": "Delirios de persecución"},
+        {"b": "Retraso en el habla"},
+        {"c": "Catatonía"},
+        {"d": "Episodios maníacos"}
+      ],
+      "correct_answer": "b",
+      "explanation": "El retraso en el habla se menciona como un signo o síntoma temprano."
+    },
+    {
+      "id": 36,
+      "question": "Según las fuentes, ¿qué porcentaje de niños aproximadamente padece algún tipo de trastorno mental?",
+      "options": [
+        {"a": "1%"},
+        {"b": "10%"},
+        {"c": "20%"},
+        {"d": "50%"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Se estima que aproximadamente el 10% de los niños y el 20% de los adolescentes padecen algún tipo de trastorno mental."
+    },
+    {
+      "id": 37,
+      "question": "¿Cuál de los siguientes se menciona como factor de riesgo para la esquizofrenia en las fuentes?",
+      "options": [
+        {"a": "Consumo de alcohol en la adolescencia"},
+        {"b": "Antecedentes familiares de esquizofrenia"},
+        {"c": "Nivel socioeconómico bajo"},
+        {"d": "Educación rígida"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Antecedentes familiares de esquizofrenia es listado como un factor de riesgo."
+    },
+    {
+      "id": 38,
+      "question": "Una nutrición deficiente que conlleva déficit de GABA se menciona como factor de riesgo para:",
+      "options": [
+        {"a": "Trastorno de Ansiedad Generalizada"},
+        {"b": "Esquizofrenia"},
+        {"c": "Trastorno Obsesivo-Compulsivo"},
+        {"d": "Trastorno Límite de la Personalidad"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La nutrición deficiente que conlleva déficit de GABA se menciona como factor de riesgo para la esquizofrenia."
+    },
+    {
+      "id": 39,
+      "question": "En el caso clínico MH de esquizofrenia infantil, ¿qué fármaco ansiolítico se incluyó en el esquema farmacológico inicial?",
+      "options": [
+        {"a": "Alprazolam"},
+        {"b": "Diazepam"},
+        {"c": "Lorazepam"},
+        {"d": "Clonazepam"}
+      ],
+      "correct_answer": "d",
+      "explanation": "El esquema farmacológico incluyó Clonazepam (Ansiolítico) y Risperidona (Antipsicótico)."
+    },
+    {
+      "id": 40,
+      "question": "En el caso clínico MH, ¿qué ocurrió en la segunda semana de evolución del tratamiento?",
+      "options": [
+        {"a": "El paciente alcanzó la remisión total de los síntomas"},
+        {"b": "Se modificó la marca del antipsicótico y el paciente se desestabilizó"},
+        {"c": "Se suspendió la medicación"},
+        {"d": "Se añadió un estabilizador del ánimo"}
+      ],
+      "correct_answer": "b",
+      "explanation": "A las dos semanas, modificaron la marca del antipsicótico y el paciente se desestabilizó nuevamente."
+    },
+    {
+      "id": 41,
+      "question": "Según la Organización Mundial de la Salud (OMS), la adicción es una enfermedad que involucra factores:",
+      "options": [
+        {"a": "Únicamente psicológicos"},
+        {"b": "Únicamente biológicos y genéticos"},
+        {"c": "Biológicos, genéticos, psicológicos y sociales"},
+        {"d": "Únicamente ambientales"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Según la OMS, la adicción es una enfermedad física y psicoemocional que involucra factores biológicos, genéticos, psicológicos y sociales."
+    },
+    {
+      "id": 42,
+      "question": "Según el DSM V, ¿qué alteración producen todas las sustancias problemáticas asociadas a la adicción?",
+      "options": [
+        {"a": "Disfunción hepática"},
+        {"b": "Alteraciones en los sistemas de recompensa del cerebro"},
+        {"c": "Inhibición de la monoamino oxidasa"},
+        {"d": "Aumento de la recaptación de serotonina"}
+      ],
+      "correct_answer": "b",
+      "explanation": "El DSM V enfatiza que todas las sustancias problemáticas producen alteraciones en los sistemas de recompensa del cerebro."
+    },
+    {
+      "id": 43,
+      "question": "¿Cuál de los siguientes NO es un concepto central de la adicción mencionado en las fuentes?",
+      "options": [
+        {"a": "Cronicidad"},
+        {"b": "Periodicidad"},
+        {"c": "Abstinencia"},
+        {"d": "Vulnerabilidad"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los conceptos centrales mencionados son Cronicidad, Periodicidad y Vulnerabilidad. La abstinencia es una reacción a la supresión, no un concepto central de la naturaleza de la adicción per se en este contexto."
+    },
+    {
+      "id": 44,
+      "question": "Según las fuentes, el consumo repetido de una sustancia adictiva puede conllevar que la sustancia:",
+      "options": [
+        {"a": "Se metabolice y elimine más rápido"},
+        {"b": "Se una más fuertemente a los receptores"},
+        {"c": "Tenga un efecto sedante aumentado"},
+        {"d": "Cause menos efectos secundarios"}
+      ],
+      "correct_answer": "a",
+      "explanation": "El consumo repetido puede conllevar que la sustancia se metabolice y elimine más rápido, lo que reduce el tiempo de disponibilidad en sangre."
+    },
+    {
+      "id": 45,
+      "question": "¿Qué concepto se define como un estado de menor sensibilidad a la droga, consecuencia de la exposición a la misma?",
+      "options": [
+        {"a": "Dependencia"},
+        {"b": "Abstinencia"},
+        {"c": "Tolerancia"},
+        {"d": "Sensibilidad"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La tolerancia es un estado de menor sensibilidad a la droga, consecuencia de la exposición a la misma."
+    },
+    {
+      "id": 46,
+      "question": "¿Aproximadamente qué porcentaje de adolescentes en Argentina ya se iniciaron en el consumo de alcohol a los 14 años, según los datos presentados?",
+      "options": [
+        {"a": "18%"},
+        {"b": "1.5%"},
+        {"c": "50%"},
+        {"d": "15%"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Según las cifras presentadas, el 50% de los adolescentes ya se iniciaron en el consumo de alcohol a los 14 años."
+    },
+    {
+      "id": 47,
+      "question": "¿Cuál es el principal neurotransmisor involucrado en los circuitos de recompensa, interfiriendo la mayoría de las sustancias adictivas en sus vías?",
+      "options": [
+        {"a": "Serotonina"},
+        {"b": "Noradrenalina"},
+        {"c": "Dopamina"},
+        {"d": "GABA"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La dopamina es el principal neurotransmisor involucrado en los circuitos de recompensa."
+    },
+    {
+      "id": 48,
+      "question": "Una sustancia que se une a un receptor celular y activa una respuesta biológica se denomina:",
+      "options": [
+        {"a": "Antagonista"},
+        {"b": "Inhibidor"},
+        {"c": "Agonista"},
+        {"d": "Modulador"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Una sustancia agonista potencia la acción del neurotransmisor o puede reemplazarla al unirse a un receptor y activar una respuesta biológica."
+    },
+    {
+      "id": 49,
+      "question": "¿Qué porcentaje de muertes es responsable el alcohol, sin contar los accidentes derivados, según las fuentes?",
+      "options": [
+        {"a": "1.5%"},
+        {"b": "3%"},
+        {"c": "18%"},
+        {"d": "55%"}
+      ],
+      "correct_answer": "b",
+      "explanation": "El alcohol es responsable del 3% de las muertes, sin contar los accidentes derivados."
+    },
+    {
+      "id": 50,
+      "question": "Según las fuentes, el alcohol es un agonista indirecto de qué neurotransmisor, al igual que las benzodiacepinas?",
+      "options": [
+        {"a": "Dopamina"},
+        {"b": "Glutamato"},
+        {"c": "GABA"},
+        {"d": "Acetilcolina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El alcohol es un agonista indirecto del GABA, al igual que las benzodiacepinas."
+    },
+    {
+      "id": 51,
+      "question": "Durante la fase REM del sueño, ¿qué ocurre típicamente con el tono muscular según las fuentes?",
+      "options": [
+        {"a": "Aumenta significativamente"},
+        {"b": "Permanece constante"},
+        {"c": "Suele decrecer"},
+        {"d": "Presenta espasmos involuntarios"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El tono muscular ayuda a mantener la postura y suele decrecer durante la fase REM del sueño."
+    },
+    {
+      "id": 52,
+      "question": "Los movimientos oculares rápidos se visibilizan durante qué fase del sueño según las fuentes?",
+      "options": [
+        {"a": "Fase 1 NREM"},
+        {"b": "Fase 3 NREM"},
+        {"c": "Fase 4 NREM"},
+        {"d": "Fase REM"}
+      ],
+      "correct_answer": "d",
+      "explanation": "En las fases REM se visibilizan movimientos oculares rápidos."
+    },
+    {
+      "id": 53,
+      "question": "La actividad eléctrica durante el sueño, registrada en el EEG, varía en:",
+      "options": [
+        {"a": "Profundidad y latencia"},
+        {"b": "Amplitud y frecuencia de las ondas"},
+        {"c": "Velocidad y dirección"},
+        {"d": "Temperatura y presión"}
+      ],
+      "correct_answer": "b",
+      "explanation": "En el EEG se registran variaciones de amplitud y frecuencia de las ondas a lo largo de las fases del sueño."
+    },
+    {
+      "id": 54,
+      "question": "¿En qué fase del sueño se producen los ensueños (sueños)?",
+      "options": [
+        {"a": "Fase 1 NREM"},
+        {"b": "Fase 3 NREM"},
+        {"c": "Fase 4 NREM"},
+        {"d": "Durante el sueño REM"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Los ensueños se producen durante el sueño REM."
+    },
+    {
+      "id": 55,
+      "question": "Según las fuentes, ¿cuál es el orden habitual de un ciclo completo de fases del sueño?",
+      "options": [
+        {"a": "REM-NREM-REM"},
+        {"b": "1-2-3-4-REM"},
+        {"c": "1-2-3-4-3-2-1... REM"},
+        {"d": "4-3-2-1-REM"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El ciclo es 1-2-3-4-3-2-1... REM."
+    },
+    {
+      "id": 56,
+      "question": "¿Qué tipo de trastornos del sueño incluye el Insomnio según las fuentes?",
+      "options": [
+        {"a": "Parasomnias"},
+        {"b": "Disomnias"},
+        {"c": "Trastornos del ritmo circadiano"},
+        {"d": "Trastornos respiratorios relacionados con el sueño"}
+      ],
+      "correct_answer": "b",
+      "explanation": "El insomnio se menciona dentro de las Disomnias, que son un tipo de trastornos del sueño."
+    },
+    {
+      "id": 57,
+      "question": "En el caso clínico G., un joven con un posible episodio psicótico, ¿qué fármaco se incrementó a 50 mg/día en la semana 3?",
+      "options": [
+        {"a": "Risperidona"},
+        {"b": "Olanzapina"},
+        {"c": "Haloperidol"},
+        {"d": "Clozapina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "En la semana 3 del caso G., el psiquiatra decidió incrementar la dosis de Haloperidol (a 50 mg/día)."
+    },
+    {
+      "id": 58,
+      "question": "Después del incremento de la dosis de Haloperidol en el caso clínico G., ¿cómo se percibía al paciente en la semana 3?",
+      "options": [
+        {"a": "Agitado e irritable"},
+        {"b": "Muy organizado en su pensamiento"},
+        {"c": "Apático y 'enlentecido'"},
+        {"d": "Con nuevas alucinaciones auditivas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El paciente llegó a la consulta con talante apático y se lo percibió 'enlentecido'."
+    },
+    {
+      "id": 59,
+      "question": "Según las fuentes, ¿qué antipsicótico atípico tiene un buen perfil terapéutico pero se asocia con un aumento de peso significativo y riesgo metabólico?",
+      "options": [
+        {"a": "Risperidona"},
+        {"b": "Quetiapina"},
+        {"c": "Olanzapina"},
+        {"d": "Aripiprazol"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Olanzapina tiene buen perfil terapéutico pero aumento de peso +++ y riesgo metabólico +++."
+    },
+    {
+      "id": 60,
+      "question": "¿Qué antipsicótico atípico requiere monitoreo regular debido al riesgo de agranulocitosis?",
+      "options": [
+        {"a": "Risperidona"},
+        {"b": "Quetiapina"},
+        {"c": "Olanzapina"},
+        {"d": "Clozapina"}
+      ],
+      "correct_answer": "d",
+      "explanation": "La Clozapina presenta riesgo de agranulocitosis, potencialmente letal, y requiere monitoreo."
+    },
+    {
+      "id": 61,
+      "question": "¿Qué antipsicótico se describe como el más 'típico de los atípicos' y funciona en irritabilidad y agresividad?",
+      "options": [
+        {"a": "Clozapina"},
+        {"b": "Olanzapina"},
+        {"c": "Risperidona"},
+        {"d": "Quetiapina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Risperidona es descrita como la más 'típica de los atípicos' y funciona en irritabilidad y agresividad."
+    },
+    {
+      "id": 62,
+      "question": "En el caso clínico M con TLP, ¿cómo percibía la paciente al terapeuta en diferentes momentos, según se describe en las fuentes?",
+      "options": [
+        {"a": "Siempre como una figura de autoridad severa"},
+        {"b": "A veces como figura positiva/contenedora, otras como autoridad rechazante/severa"},
+        {"c": "Siempre devaluándolo"},
+        {"d": "Como alguien desinteresado y no involucrado"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La paciente lo percibía de diferentes formas, alternando entre figura positiva/contenedora y autoridad rechazante/severa, o involucrado y desinteresado."
+    },
+    {
+      "id": 63,
+      "question": "¿En qué década comenzó la psicofarmacología moderna con la introducción de medicamentos como los antipsicóticos y antidepresivos?",
+      "options": [
+        {"a": "1920"},
+        {"b": "1950"},
+        {"c": "1980"},
+        {"d": "2000"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La psicofarmacología moderna comenzó en la década de 1950."
+    },
+    {
+      "id": 64,
+      "question": "¿Qué modelo teórico sugiere que la vulnerabilidad a los trastornos mentales varía según la edad y otros factores individuales, y que factores estresantes desencadenan los trastornos?",
+      "options": [
+        {"a": "Modelo Bio-Psico-Social"},
+        {"b": "Modelo Psicodinámico"},
+        {"c": "Modelo Conductual"},
+        {"d": "Modelo Diátesis-Estrés"}
+      ],
+      "correct_answer": "d",
+      "explanation": "El Modelo Diátesis-Estrés propone que las personas tienen diferentes grados de vulnerabilidad (diátesis) y que factores estresantes desencadenan los trastornos, variando la vulnerabilidad según la edad."
+    },
+    {
+      "id": 65,
+      "question": "¿Cuál es la tasa general de cumplimiento o adherencia al tratamiento con psicofármacos mencionada en las fuentes?",
+      "options": [
+        {"a": "Superior al 90%"},
+        {"b": "Aproximadamente el 75%"},
+        {"c": "No superan el 60%"},
+        {"d": "Varía mucho y no hay estimación general"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las fuentes señalan que las tasas de cumplimiento o adherencia, en general, no superan el 60%."
+    },
+    {
+      "id": 66,
+      "question": "¿Qué principio de la farmacoterapia indica que la farmacoterapia por sí misma no suele ser suficiente para lograr la recuperación?",
+      "options": [
+        {"a": "Monitorizar efectos adversos"},
+        {"b": "Valoración diagnóstica fundamental"},
+        {"c": "Farmacoterapia requiere tratamiento combinado (ej: psicoterapia)"},
+        {"d": "Decidir duración del tratamiento"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La farmacoterapia por sí misma no suele ser suficiente para lograr la recuperación, requiriendo a menudo tratamiento combinado."
+    },
+    {
+      "id": 67,
+      "question": "Según las recomendaciones de prescripción, ¿cuándo se deben combinar fármacos en psicofarmacología?",
+      "options": [
+        {"a": "Siempre que sea posible"},
+        {"b": "Solo en situaciones especiales"},
+        {"c": "Al inicio de cualquier tratamiento"},
+        {"d": "Para reducir el costo"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Se recomienda combinar fármacos solo en situaciones especiales."
+    },
+    {
+      "id": 68,
+      "question": "¿Qué tipo de información sobre los efectos secundarios frecuentes se debe dar a los pacientes al iniciar un tratamiento, usando el ejemplo de los ISRS?",
+      "options": [
+        {"a": "Efectos cardiovasculares"},
+        {"b": "Efectos neurológicos"},
+        {"c": "Efectos gastrointestinales"},
+        {"d": "Efectos metabólicos"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Como ejemplo de efectos secundarios frecuentes, se mencionan los efectos gastrointestinales en ISRS."
+    },
+    {
+      "id": 69,
+      "question": "¿Qué clase de fármacos son los ansiolíticos más importantes y utilizados según las fuentes?",
+      "options": [
+        {"a": "Barbitúricos"},
+        {"b": "Antidepresivos tricíclicos"},
+        {"c": "Inhibidores Selectivos de la Recaptación de Serotonina (ISRS)"},
+        {"d": "Benzodiacepinas (BZD)"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Las benzodiacepinas son los ansiolíticos más importantes y utilizados."
+    },
+    {
+      "id": 70,
+      "question": "Las Benzodiacepinas reemplazaron a los barbitúricos como ansiolíticos porque eran:",
+      "options": [
+        {"a": "Más baratos"},
+        {"b": "Más efectivos y seguros"},
+        {"c": "De acción más lenta"},
+        {"d": "Menos adictivas pero igual de riesgosas"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Las benzodiacepinas reemplazaron a los barbitúricos por ser más efectivos y seguros."
+    },
+    {
+      "id": 71,
+      "question": "¿Cuál es el mecanismo de acción de las benzodiacepinas según las fuentes?",
+      "options": [
+        {"a": "Son agonistas directos del GABA"},
+        {"b": "Bloquean la recaptación de GABA"},
+        {"c": "Son moduladores positivos (agonistas INDIRECTOS) de GABA"},
+        {"d": "Bloquean los canales de sodio"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las benzodiacepinas son moduladores positivos (agonistas INDIRECTOS de GABA)."
+    },
+    {
+      "id": 72,
+      "question": "¿Cuál de los siguientes trastornos es listado como un tipo de Trastorno de Ansiedad en las fuentes?",
+      "options": [
+        {"a": "Esquizofrenia"},
+        {"b": "Trastorno Depresivo Mayor"},
+        {"c": "Trastorno de Ansiedad de Separación"},
+        {"d": "Trastorno Bipolar"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El Trastorno de Ansiedad de Separación se incluye en la lista de trastornos de ansiedad."
+    },
+    {
+      "id": 73,
+      "question": "¿Qué tipo de intervención se considera de importancia y ofrece mejores resultados para los trastornos de ansiedad según las fuentes?",
+      "options": [
+        {"a": "Intervención únicamente farmacológica"},
+        {"b": "Intervención únicamente psicológica"},
+        {"c": "Intervención combinada (psicofarmacológica y psicológica)"},
+        {"d": "Tratamiento con terapias alternativas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los mejores resultados se obtienen con tratamiento combinado: psicológico y psicofarmacológico."
+    },
+    {
+      "id": 74,
+      "question": "Uno de los criterios para el Trastorno de Angustia es la presencia de:",
+      "options": [
+        {"a": "Preocupación crónica sobre múltiples eventos"},
+        {"b": "Conductas compulsivas recurrentes"},
+        {"c": "Crisis de angustia recidivantes e inesperadas"},
+        {"d": "Miedo intenso a situaciones sociales"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Un criterio para el Trastorno de Angustia es la presencia de crisis de angustia recidivantes e inesperadas."
+    },
+    {
+      "id": 75,
+      "question": "¿Cuál de los siguientes es un síntoma de una crisis de angustia mencionado en las fuentes?",
+      "options": [
+        {"a": "Tensión muscular constante"},
+        {"b": "Dificultad para concentrarse"},
+        {"c": "Miedo a morir"},
+        {"d": "Irritabilidad persistente"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Miedo a morir es listado como un síntoma de las crisis de angustia."
+    },
+    {
+      "id": 76,
+      "question": "¿Cómo se definen las obsesiones en las fuentes?",
+      "options": [
+        {"a": "Actos repetitivos para reducir la ansiedad"},
+        {"b": "Preocupaciones excesivas sobre situaciones cotidianas"},
+        {"c": "Pensamientos, ideas o impulsos recurrentes y persistentes que causan ansiedad o malestar"},
+        {"d": "Miedos intensos a objetos o situaciones específicas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las obsesiones son descritas como pensamientos, ideas o impulsos recurrentes y persistentes que causan ansiedad o malestar."
+    },
+    {
+      "id": 77,
+      "question": "¿Cuál es el propósito principal de las compulsiones en el TOC según las fuentes?",
+      "options": [
+        {"a": "Obtener placer o gratificación"},
+        {"b": "Evitar situaciones temidas"},
+        {"c": "Prevenir o atenuar la ansiedad o el malestar"},
+        {"d": "Distraerse de los pensamientos intrusivos"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las compulsiones tienen como propósito prevenir o atenuar la ansiedad o el malestar."
+    },
+    {
+      "id": 78,
+      "question": "La esencia del Trastorno de Ansiedad Generalizada (TAG) es la ansiedad y preocupación excesivas, acompañadas de síntomas psicofisiológicos, por un periodo mínimo de:",
+      "options": [
+        {"a": "1 mes"},
+        {"b": "3 meses"},
+        {"c": "6 meses"},
+        {"d": "1 año"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El TAG se caracteriza por ansiedad y preocupación excesivas, acompañadas de síntomas psicofisiológicos, por un periodo mínimo de 6 meses."
+    },
+    {
+      "id": 79,
+      "question": "Uno de los criterios diagnósticos para el TAG es la dificultad del sujeto para controlar:",
+      "options": [
+        {"a": "Sus impulsos"},
+        {"b": "Este estado de constante preocupación"},
+        {"c": "Sus movimientos motores"},
+        {"d": "Sus reacciones emocionales intensas"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Al sujeto le resulta difícil controlar este estado de constante preocupación."
+    },
+    {
+      "id": 80,
+      "question": "¿Cuántos síntomas asociados a la ansiedad y preocupación excesivas se requieren para el diagnóstico de TAG en adultos, además de la dificultad para controlar la preocupación, según las fuentes?",
+      "options": [
+        {"a": "Al menos 1"},
+        {"b": "Al menos 3"},
+        {"c": "Al menos 6"},
+        {"d": "Ninguno adicional"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Todo ello se asocia a al menos 3 de 6 síntomas (en los niños basta con 1)."
+    },
+    {
+      "id": 81,
+      "question": "En el TAG, el centro de la ansiedad y preocupaciones no es monosintomático. ¿Cuál de los siguientes es un ejemplo de foco monosintomático NO característico del TAG?",
+      "options": [
+        {"a": "Problemas laborales"},
+        {"b": "Seguridad familiar"},
+        {"c": "Salud de los hijos"},
+        {"d": "Miedo a padecer una crisis de angustia"}
+      ],
+      "correct_answer": "d",
+      "explanation": "El centro de la ansiedad y preocupaciones no se limita a un solo foco; por ejemplo, no se limita al miedo al miedo de padecer una crisis de angustia."
+    },
+    {
+      "id": 82,
+      "question": "En el manejo agudo de una crisis de angustia, ¿qué tipo de información se recomienda brindar al paciente?",
+      "options": [
+        {"a": "Información detallada sobre el mecanismo de acción del fármaco"},
+        {"b": "Que las crisis son autolimitadas y tienen tratamiento específico"},
+        {"c": "Que debe evitar situaciones que gatillen la ansiedad en el futuro"},
+        {"d": "Que la crisis no tiene expresión fisiológica"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Se recomienda brindarle información sobre las crisis, que son autolimitadas y tienen tratamiento específico, entre otras cosas."
+    },
+    {
+      "id": 83,
+      "question": "¿Qué clase de fármacos son la primera línea de tratamiento para el Trastorno de Pánico según las fuentes?",
+      "options": [
+        {"a": "Benzodiacepinas"},
+        {"b": "Antipsicóticos"},
+        {"c": "ISRS"},
+        {"d": "Estabilizadores del ánimo"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los ISRS son la primera línea de tratamiento farmacológico para el Trastorno de Pánico."
+    },
+    {
+      "id": 84,
+      "question": "Para el manejo agudo de una crisis de angustia o pánico, ¿qué tipo de benzodiacepinas se mencionan como útiles?",
+      "options": [
+        {"a": "De vida media larga"},
+        {"b": "De baja potencia"},
+        {"c": "De alta potencia y rápida absorción"},
+        {"d": "De administración intramuscular únicamente"}
+      ],
+      "correct_answer": "c",
+      "explanation": "En agudo, se mencionan las benzodiacepinas de alta potencia y rápida absorción, como Alprazolam y Clonazepam."
+    },
+    {
+      "id": 85,
+      "question": "Las benzodiacepinas se asocian a los ISRS en el tratamiento del Trastorno de Pánico para cubrir:",
+      "options": [
+        {"a": "Los síntomas positivos"},
+        {"b": "La ansiedad anticipatoria"},
+        {"c": "El periodo de latencia de los ISRS"},
+        {"d": "Los efectos secundarios de los ISRS"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Se usan asociadas a los ISRS, por el periodo de latencia de los ISRS."
+    },
+    {
+      "id": 86,
+      "question": "¿Qué fármaco dual (SNRI) se menciona como de elección para el TAG y con potente efecto antipánico?",
+      "options": [
+        {"a": "Fluoxetina"},
+        {"b": "Venlafaxina"},
+        {"c": "Sertralina"},
+        {"d": "Citalopram"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La Venlafaxina tiene potente efecto antipánico y es de elección en TAG."
+    },
+    {
+      "id": 87,
+      "question": "Según las fuentes, el curso de los trastornos crónicos de ansiedad a menudo presenta patrones de:",
+      "options": [
+        {"a": "Mejora continua"},
+        {"b": "Deterioro progresivo"},
+        {"c": "Exacerbaciones y remisiones"},
+        {"d": "Estabilidad constante de síntomas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los pacientes con trastornos crónicos muestran un patrón de exacerbaciones y remisiones."
+    },
+    {
+      "id": 88,
+      "question": "¿Qué puntaje en la escala HAM-A* indica 'remisión' en los trastornos de ansiedad según las fuentes?",
+      "options": [
+        {"a": "Mayor a 7"},
+        {"b": "Mayor o igual a 50%"},
+        {"c": "Menor o igual a 7"},
+        {"d": "0"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La remisión se define como la desaparición virtual de los síntomas y normalidad funcional, con un puntaje ≤7 en la HAM-A*."
+    },
+    {
+      "id": 89,
+      "question": "La falta de coordinación muscular que afecta el equilibrio y el movimiento, mencionada como efecto adverso de las BZD, se denomina:",
+      "options": [
+        {"a": "Disartria"},
+        {"b": "Ataxia"},
+        {"c": "Acatisia"},
+        {"d": "Temblor fino"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La ataxia es la falta de coordinación muscular, afectando el equilibrio y el movimiento."
+    },
+    {
+      "id": 90,
+      "question": "Los trastornos de la memoria a corto plazo son un efecto adverso común de:",
+      "options": [
+        {"a": "Antipsicóticos atípicos"},
+        {"b": "ISRS"},
+        {"c": "Estabilizadores del ánimo"},
+        {"d": "Benzodiacepinas"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Los trastornos mnésicos son un efecto adverso frecuente de las BZD, principalmente en la memoria a corto plazo."
+    },
+    {
+      "id": 91,
+      "question": "¿En qué poblaciones son más comunes las reacciones paradojales a las benzodiacepinas (conducta agresiva, euforia, etc.)?",
+      "options": [
+        {"a": "Adolescentes y adultos jóvenes"},
+        {"b": "Niños, ancianos y personas con trastorno límite de la personalidad"},
+        {"c": "Mujeres"},
+        {"d": "Personas con antecedentes de adicciones"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Pueden producir reacción paradojal (conducta agresiva, desinhibición, euforia, insomnio) en niños, ancianos, BORDER LINE."
+    },
+    {
+      "id": 92,
+      "question": "¿Qué tipo de benzodiacepinas tienen más riesgo de causar fenómenos ansiosos de rebote al suspenderse?",
+      "options": [
+        {"a": "Preparados de vida media larga"},
+        {"b": "Preparados de vida media corta-intermedia"},
+        {"c": "De administración sublingual"},
+        {"d": "De alta potencia"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Con preparados de vida media corta-intermedia pueden aparecer fenómenos ansiosos de REBOTE."
+    },
+    {
+      "id": 93,
+      "question": "Se debe evitar la administración de benzodiacepinas en el primer trimestre de gestación debido al riesgo de:",
+      "options": [
+        {"a": "Hiperemesis gravídica"},
+        {"b": "Parto prematuro"},
+        {"c": "Malformaciones congénitas"},
+        {"d": "Diabetes gestacional"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Es prudente evitar su administración en el 1er trimestre de la gestación. Riesgo de malformaciones congénitas."
+    },
+    {
+      "id": 94,
+      "question": "¿Cuál de las siguientes benzodiacepinas se menciona entre las más usadas, con presentación oral y sublingual, y dosis de 0.50 a 3 mg?",
+      "options": [
+        {"a": "Alprazolam"},
+        {"b": "Diazepam"},
+        {"c": "Lorazepam"},
+        {"d": "Clonazepam"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Clonazepam se menciona entre las más usadas con esa dosis y presentaciones."
+    },
+    {
+      "id": 95,
+      "question": "¿Cuál de las siguientes NO es una contraindicación para el uso de benzodiacepinas mencionada en las fuentes?",
+      "options": [
+        {"a": "Miastenia gravis"},
+        {"b": "Enfermedad Pulmonar Obstructiva Crónica (EPOC)"},
+        {"c": "Antecedentes de adicciones"},
+        {"d": "Hipertensión arterial"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Las contraindicaciones mencionadas son Miastenia Gravis, EPOC y antecedentes de adicciones."
+    },
+    {
+      "id": 96,
+      "question": "Se recomienda combinar el uso de benzodiacepinas con Terapia Cognitivo-Conductual para obtener mejores resultados y:",
+      "options": [
+        {"a": "Acelerar la acción del fármaco"},
+        {"b": "Reducir la dependencia"},
+        {"c": "Disminuir el costo del tratamiento"},
+        {"d": "Aumentar la dosis del fármaco"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Deben combinarse con intervenciones psicoterapéuticas, como la terapia cognitivo-conductual, para obtener mejores resultados y reducir la dependencia."
+    },
+    {
+      "id": 97,
+      "question": "¿Cuál de los siguientes es un síntoma negativo de la esquizofrenia observable directamente, según las fuentes?",
+      "options": [
+        {"a": "Alucinaciones auditivas"},
+        {"b": "Ideas delirantes"},
+        {"c": "Aspecto Descuidado"},
+        {"d": "Agitación"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El Aspecto Descuidado (falta de higiene, ropa sucia) es un síntoma negativo observable directamente."
+    },
+    {
+      "id": 98,
+      "question": "La falta de interés en aficiones o actividades, con proyectos de vida limitados, es un síntoma negativo de la esquizofrenia identificado a través de:",
+      "options": [
+        {"a": "La observación directa"},
+        {"b": "Pruebas de neuroimagen"},
+        {"c": "Cuestionarios o entrevistas estructuradas"},
+        {"d": "Análisis de laboratorio"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Reducción en el Interés es un síntoma negativo identificado a través de Cuestionarios."
+    },
+    {
+      "id": 99,
+      "question": "¿Qué vía dopaminérgica se relaciona con los síntomas positivos (delirios y alucinaciones) en la esquizofrenia debido a su hiperactividad?",
+      "options": [
+        {"a": "Vía Mesocortical"},
+        {"b": "Vía Nigroestriada"},
+        {"c": "Vía Tuberoinfundibular"},
+        {"d": "Vía Mesolímbica"}
+      ],
+      "correct_answer": "d",
+      "explanation": "La hiperactividad de la vía Mesolímbica se relaciona con los síntomas positivos."
+    },
+    {
+      "id": 100,
+      "question": "¿Qué efecto adverso es causado por el bloqueo de los receptores D2 en la vía nigroestriada por los antipsicóticos?",
+      "options": [
+        {"a": "Aumento de peso"},
+        {"b": "Hiperprolactinemia"},
+        {"c": "Efectos extrapiramidales"},
+        {"d": "Sedación"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El bloqueo de D2 en esta vía genera efectos extrapiramidales, como el parkinsonismo."
+    },
+    {
+      "id": 101,
+      "question": "La hipoactividad de la vía dopaminérgica mesocortical al córtex prefrontal dorsolateral se relaciona con qué síntomas en la esquizofrenia?",
+      "options": [
+        {"a": "Síntomas positivos"},
+        {"b": "Síntomas negativos y cognitivos"},
+        {"c": "Síntomas afectivos"},
+        {"d": "Efectos extrapiramidales"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La vía Mesocortical al córtex prefrontal dorsolateral está relacionada con síntomas negativos y cognitivos."
+    },
+    {
+      "id": 102,
+      "question": "Según la Hipótesis Dopaminérgica, ¿qué causa los síntomas positivos en la esquizofrenia?",
+      "options": [
+        {"a": "Hipoactividad mesocortical"},
+        {"b": "Hiperactividad mesolímbica"},
+        {"c": "Bloqueo de receptores D2"},
+        {"d": "Déficit de GABA"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La Hipótesis Dopaminérgica postula que la hiperactividad Mesolímbica origina síntomas positivos."
+    },
+    {
+      "id": 103,
+      "question": "¿Cuál es el mecanismo de acción principal de los Antipsicóticos Típicos (Primera Generación)?",
+      "options": [
+        {"a": "Bloquean receptores D2"},
+        {"b": "Bloquean receptores 5HT2A"},
+        {"c": "Son agonistas D2"},
+        {"d": "Inhiben la recaptación de noradrenalina"}
+      ],
+      "correct_answer": "a",
+      "explanation": "Su mecanismo de acción es el ANTAGONISMO (BLOQUEO) D2."
+    },
+    {
+      "id": 104,
+      "question": "Los antipsicóticos típicos son más eficaces para reducir qué tipo de síntomas en la esquizofrenia?",
+      "options": [
+        {"a": "Síntomas negativos"},
+        {"b": "Síntomas cognitivos"},
+        {"c": "Síntomas positivos"},
+        {"d": "Síntomas afectivos"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Este mecanismo (bloqueo D2) es eficaz para tratar los síntomas positivos (vía mesolímbica)."
+    },
+    {
+      "id": 105,
+      "question": "¿Cuál de los siguientes es un efecto adverso de los antipsicóticos típicos debido a su acción en la vía tuberoinfundibular?",
+      "options": [
+        {"a": "Síntomas extrapiramidales"},
+        {"b": "Aumento de peso"},
+        {"c": "Hiperprolactinemia"},
+        {"d": "Sedación"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Debido a su acción en la vía tuberoinfundibular, pueden causar hiperprolactinemia."
+    },
+    {
+      "id": 106,
+      "question": "¿Qué antipsicótico típico se menciona como de alta potencia y fue el Gold Standard para el tratamiento de la psicosis hasta el advenimiento de los atípicos?",
+      "options": [
+        {"a": "Clorpromazina"},
+        {"b": "Tioridazina"},
+        {"c": "Haloperidol"},
+        {"d": "Trifluperazina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El Haloperidol es el antipsicótico típico más utilizado, y fue el Gold Standard."
+    },
+    {
+      "id": 107,
+      "question": "¿Qué mecanismo de acción principal diferencia a los antipsicóticos atípicos de los típicos?",
+      "options": [
+        {"a": "Bloqueo exclusivo de D2"},
+        {"b": "Bloqueo de D2 y 5HT2"},
+        {"c": "Agonismo D2"},
+        {"d": "Bloqueo de receptores muscarínicos"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Su mecanismo de acción es el ANTAGONISMO (BLOQUEO) D2 y 5HT2."
+    },
+    {
+      "id": 108,
+      "question": "Los antipsicóticos atípicos presentan menos efectos motores extrapiramidales que los típicos debido a:",
+      "options": [
+        {"a": "Mayor bloqueo D2 en la vía nigroestriada"},
+        {"b": "Menor impacto en la vía nigroestriada"},
+        {"c": "Bloqueo exclusivo de receptores 5HT2"},
+        {"d": "Mayor afinidad por receptores muscarínicos"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Reducen efectos extrapiramidales por su menor impacto en la vía nigroestriada."
+    },
+    {
+      "id": 109,
+      "question": "Además de los síntomas positivos, los antipsicóticos atípicos ofrecen leves mejoras en:",
+      "options": [
+        {"a": "Síntomas motores"},
+        {"b": "Síntomas negativos"},
+        {"c": "Efectos anticolinérgicos"},
+        {"d": "Síntomas de ansiedad aguda"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Son eficaces en síntomas positivos y ofrecen leves mejoras en síntomas negativos."
+    },
+    {
+      "id": 110,
+      "question": "¿Cuál de los siguientes es un efecto adverso común de los antipsicóticos atípicos relacionado con el metabolismo?",
+      "options": [
+        {"a": "Hipotensión ortostática"},
+        {"b": "Prolongación del Intervalo QT"},
+        {"c": "Agranulocitosis"},
+        {"d": "Aumento de peso"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Aumento de peso, dislipemia e hiperglucemia son efectos adversos metabólicos comunes de los antipsicóticos atípicos."
+    },
+    {
+      "id": 111,
+      "question": "La sensación de inquietud que se traduce en movimientos repetitivos (típicamente en las piernas), acompañada de un sentimiento de ansiedad, es un efecto adverso temprano de los antipsicóticos típicos conocido como:",
+      "options": [
+        {"a": "Distonía"},
+        {"b": "Parkinsonismo"},
+        {"c": "Acatisia"},
+        {"d": "Disquinesia tardía"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Acatisia es la sensación de inquietud con movimientos repetitivos."
+    },
+    {
+      "id": 112,
+      "question": "¿Qué efecto adverso tardío de los antipsicóticos típicos se caracteriza por movimientos involuntarios de la musculatura bucolinguofacial (labios, lengua, mandíbula)?",
+      "options": [
+        {"a": "Distonía"},
+        {"b": "Parkinsonismo"},
+        {"c": "Síndrome Neuroléptico Maligno"},
+        {"d": "Disquinesias Tardías"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Las Disquinesias Tardías son movimientos involuntarios de la musculatura bucolinguofacial."
+    },
+    {
+      "id": 113,
+      "question": "¿Cuál es el efecto adverso grave, potencialmente letal, de los antipsicóticos típicos que requiere hospitalización en cuidados intensivos?",
+      "options": [
+        {"a": "Disquinesias Tardías"},
+        {"b": "Acatisia"},
+        {"c": "Síndrome Neuroléptico Maligno"},
+        {"d": "Distonías"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El Síndrome Neuroléptico Maligno es un efecto adverso grave caracterizado por rigidez muscular extrema, fiebre alta, etc., que requiere hospitalización en cuidados intensivos."
+    },
+    {
+      "id": 114,
+      "question": "La rigidez, los temblores y la bradicinesia ('cara de póker') son síntomas de qué efecto adverso temprano de los antipsicóticos típicos?",
+      "options": [
+        {"a": "Distonía"},
+        {"b": "Acatisia"},
+        {"c": "Parkinsonismo"},
+        {"d": "Disquinesia tardía"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El parkinsonismo presenta síntomas similares a la enfermedad de Parkinson, como rigidez, temblores y bradicinesia."
+    },
+    {
+      "id": 115,
+      "question": "El aumento de peso y la dislipemia asociados a los antipsicóticos atípicos se relacionan con el bloqueo de qué receptores en el hipotálamo?",
+      "options": [
+        {"a": "D2 y 5HT2A"},
+        {"b": "H1 y 5-HT2c"},
+        {"c": "α1 y β1"},
+        {"d": "GABAA y GABA B"}
+      ],
+      "correct_answer": "b",
+      "explanation": "El aumento de peso y la dislipemia están asociados con el bloqueo de receptores H1 y 5-HT2c en el hipotálamo."
+    },
+    {
+      "id": 116,
+      "question": "La prolongación del Intervalo QT, con riesgo de desarrollar arritmias cardíacas potencialmente letales, es un efecto adverso cardiovascular de:",
+      "options": [
+        {"a": "Antidepresivos tricíclicos"},
+        {"b": "ISRS"},
+        {"c": "Antipsicóticos atípicos"},
+        {"d": "Benzodiacepinas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La prolongación del Intervalo QT es un efecto adverso cardiovascular de los antipsicóticos atípicos."
+    },
+    {
+      "id": 117,
+      "question": "¿Qué antipsicótico atípico se caracteriza por un bloqueo débil de D2 y fuerte afinidad por los receptores de histamina H1?",
+      "options": [
+        {"a": "Risperidona"},
+        {"b": "Olanzapina"},
+        {"c": "Quetiapina"},
+        {"d": "Clozapina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Quetiapina tiene un bloqueo débil de D2 con fuerte afinidad por los receptores de histamina H1."
+    },
+    {
+      "id": 118,
+      "question": "La sedación y somnolencia son efectos adversos comunes, especialmente al inicio del tratamiento con:",
+      "options": [
+        {"a": "Metilfenidato"},
+        {"b": "Quetiapina"},
+        {"c": "Litio"},
+        {"d": "Atomoxetina"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La sedación y somnolencia son efectos adversos más comunes de la Quetiapina, especialmente al inicio."
+    },
+    {
+      "id": 119,
+      "question": "El aumento de riesgo de convulsiones, especialmente en dosis altas, es un efecto adverso potencial de:",
+      "options": [
+        {"a": "Risperidona"},
+        {"b": "Olanzapina"},
+        {"c": "Quetiapina"},
+        {"d": "Clozapina"}
+      ],
+      "correct_answer": "d",
+      "explanation": "El riesgo de convulsiones está aumentado con la Clozapina en dosis altas."
+    },
+    {
+      "id": 120,
+      "question": "¿Cuál es el objetivo principal de la Fase Aguda del tratamiento de la esquizofrenia?",
+      "options": [
+        {"a": "Consolidar la remisión y reducir el riesgo de recaídas"},
+        {"b": "Prevención de nuevos episodios"},
+        {"c": "Reducción de síntomas severos, control de conductas disfuncionales y prevención de daños"},
+        {"d": "Asegurar la continuidad y evitar el abandono del tratamiento"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El objetivo de la Fase Aguda es la reducción de síntomas severos, control de conductas disfuncionales y prevención de daños."
+    },
+    {
+      "id": 121,
+      "question": "Si un paciente con esquizofrenia ha tenido múltiples episodios o un intento de suicidio, ¿cuánto tiempo mínimo debe durar la fase de mantenimiento del tratamiento?",
+      "options": [
+        {"a": "1-2 años"},
+        {"b": "3 años"},
+        {"c": "5 años"},
+        {"d": "12 meses"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Para múltiples episodios o intento de suicidio, el tratamiento mínimo de mantenimiento es de 5 años."
+    },
+    {
+      "question": "La indicación de Clozapina para la esquizofrenia resistente ocurre cuando han fallado dos antipsicóticos en dosis adecuadas, siendo:",
+      "options": [
+        {"a": "Ambos típicos"},
+        {"b": "Ambos atípicos"},
+        {"c": "Uno típico y el otro atípico"},
+        {"d": "Cualquier combinación de dos fármacos"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La clozapina se indica cuando dos antipsicóticos (uno típico y uno atípico) han fallado en dosis adecuadas."
+    },
+    {
+      "id": 123,
+      "question": "¿Qué mecanismo postula que estímulos repetidos como el estrés o cambios en el sueño pueden desencadenar episodios bipolares y aumentar su frecuencia?",
+      "options": [
+        {"a": "Hipótesis Dopaminérgica"},
+        {"b": "Modelo Diátesis-Estrés"},
+        {"c": "Mecanismo Kindling"},
+        {"d": "Desregulación serotoninérgica"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El mecanismo de kindling (o sensibilización) sugiere que estímulos repetidos pueden activar circuitos neuronales hasta desencadenar episodios, contribuyendo al aumento en la frecuencia y severidad."
+    },
+    {
+      "id": 124,
+      "question": "Un fármaco diseñado para controlar las fases de manía y depresión en el trastorno bipolar sin aumentar la inestabilidad del estado de ánimo se denomina:",
+      "options": [
+        {"a": "Antidepresivo"},
+        {"b": "Ansiolítico"},
+        {"c": "Antipsicótico"},
+        {"d": "Estabilizador del ánimo"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Un estabilizador del ánimo es un fármaco diseñado para controlar las fases de manía y depresión sin aumentar la inestabilidad del estado de ánimo."
+    },
+    {
+      "id": 125,
+      "question": "¿Qué estabilizador del ánimo influye en la excitabilidad celular a través de su acción en los canales de Na+, K+ y Ca++?",
+      "options": [
+        {"a": "Litio"},
+        {"b": "Valproato"},
+        {"c": "Carbamazepina"},
+        {"d": "Lamotrigina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Carbamazepina influye en la excitabilidad celular a través de su acción en los canales de Na+, K+ y Ca++."
+    },
+    {
+      "id": 126,
+      "question": "La agranulocitosis y el síndrome de Stevens-Johnson son efectos adversos potenciales de:",
+      "options": [
+        {"a": "Litio"},
+        {"b": "Valproato"},
+        {"c": "Carbamazepina"},
+        {"d": "Lamotrigina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Carbamazepina tiene riesgo de agranulocitosis y síndrome de Stevens-Johnson."
+    },
+    {
+      "id": 127,
+      "question": "Para la manía aguda y la prevención de recaídas en el trastorno bipolar, la combinación terapéutica preferida basada en evidencia es:",
+      "options": [
+        {"a": "Litio + Lamotrigina"},
+        {"b": "Antidepresivo + Antipsicótico típico"},
+        {"c": "Antipsicótico Atípico + Litio o Valproato"},
+        {"d": "Valproato + Carbamazepina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La combinación de Antipsicótico Atípico + Litio o Valproato es la combinación preferida para la manía aguda y la prevención de recaídas."
+    },
+    {
+      "id": 128,
+      "question": "¿Cuál es el objetivo de la Fase Aguda del tratamiento del trastorno bipolar?",
+      "options": [
+        {"a": "Prevención de nuevos episodios"},
+        {"b": "Consolidar la remisión de síntomas"},
+        {"c": "Control rápido de los síntomas graves para prevenir daños"},
+        {"d": "Reducción de ciclado"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El objetivo de la Fase Aguda es el control rápido de los síntomas graves para prevenir daños."
+    },
+    {
+      "id": 129,
+      "question": "El tratamiento de mantenimiento del trastorno bipolar se caracteriza por ser:",
+      "options": [
+        {"a": "De corta duración, generalmente unas semanas"},
+        {"b": "Solo farmacológico, sin intervenciones psicológicas"},
+        {"c": "A largo plazo y personalizado"},
+        {"d": "Igual para todos los pacientes"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El tratamiento de mantenimiento es a largo plazo y se personaliza según la respuesta y necesidades del paciente."
+    },
+    {
+      "id": 130,
+      "question": "¿Qué estabilizador del ánimo es el primer tratamiento de elección para la manía y eficaz para prevenir recurrencias?",
+      "options": [
+        {"a": "Valproato"},
+        {"b": "Lamotrigina"},
+        {"c": "Carbamazepina"},
+        {"d": "Litio"}
+      ],
+      "correct_answer": "d",
+      "explanation": "El Litio es el primer tratamiento de elección para la manía y eficaz para prevenir recurrencias."
+    },
+    {
+      "id": 131,
+      "question": "¿Qué estabilizador del ánimo tiene un estrecho margen terapéutico y resulta riesgoso en pacientes con ideación suicida?",
+      "options": [
+        {"a": "Valproato"},
+        {"b": "Lamotrigina"},
+        {"c": "Litio"},
+        {"d": "Carbamazepina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El Litio tiene un estrecho margen terapéutico y resulta riesgoso en pacientes con ideación suicida."
+    },
+    {
+      "id": 132,
+      "question": "La polidipsia (sed excesiva) y la poliuria (micción excesiva) son efectos secundarios de:",
+      "options": [
+        {"a": "Valproato"},
+        {"b": "Lamotrigina"},
+        {"c": "Litio"},
+        {"d": "Carbamazepina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los efectos secundarios del Litio incluyen polidipsia y poliuria."
+    },
+    {
+      "id": 133,
+      "question": "El Valproato se prefiere al Litio en pacientes bipolares que presentan:",
+      "options": [
+        {"a": "Síntomas psicóticos"},
+        {"b": "Ciclación rápida"},
+        {"c": "Ideación suicida"},
+        {"d": "Resistencia al tratamiento"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Se prefiere el ácido valproico o la carbamazepina al Litio en pacientes con ideación suicida."
+    },
+    {
+      "id": 134,
+      "question": "¿Qué estabilizador del ánimo es eficaz principalmente en la prevención de episodios depresivos pero requiere titulación lenta para evitar un efecto adverso grave (necrólisis epidérmica tóxica)?",
+      "options": [
+        {"a": "Litio"},
+        {"b": "Valproato"},
+        {"c": "Lamotrigina"},
+        {"d": "Quetiapina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Lamotrigina es eficaz en la prevención de episodios depresivos y requiere una titulación lenta para evitar la necrólisis epidérmica tóxica."
+    },
+    {
+      "id": 135,
+      "question": "Según Oldham (2001), un tipo de TLP se caracteriza por inestabilidad emocional, con cambios intensos y repentinos en el estado de ánimo. Este es el Tipo:",
+      "options": [
+        {"a": "Impulsivo"},
+        {"b": "Afectivo"},
+        {"c": "Agresivo"},
+        {"d": "Dependiente"}
+      ],
+      "correct_answer": "b",
+      "explanation": "El Tipo Afectivo predomina la inestabilidad emocional."
+    },
+    {
+      "id": 136,
+      "question": "La impulsividad extrema, que se traduce en conductas de riesgo, autolesiones o abuso de sustancias, es característica del tipo de TLP denominado:",
+      "options": [
+        {"a": "Tipo Vacío"},
+        {"b": "Tipo Dependiente"},
+        {"c": "Tipo Impulsivo"},
+        {"d": "Tipo Afectivo"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El Tipo Impulsivo se caracteriza por una impulsividad extrema que se traduce en conductas de riesgo, autolesiones o abuso de sustancias."
+    },
+    {
+      "id": 137,
+      "question": "¿Qué tipo de TLP predomina una sensación crónica de vacío existencial y falta de propósito?",
+      "options": [
+        {"a": "Tipo Agresivo"},
+        {"b": "Tipo Dependiente"},
+        {"c": "Tipo Impulsivo"},
+        {"d": "Tipo Vacío"}
+      ],
+      "correct_answer": "d",
+      "explanation": "El Tipo Vacío predomina una sensación crónica de vacío existencial y falta de propósito."
+    },
+    {
+      "id": 138,
+      "question": "¿Cuál es el objetivo principal de la farmacoterapia en el Trastorno Límite de la Personalidad (TLP)?",
+      "options": [
+        {"a": "Curar el trastorno"},
+        {"b": "Eliminar todos los síntomas"},
+        {"c": "Estabilización emocional, control de la impulsividad y manejo de síntomas psicóticos transitorios"},
+        {"d": "Reemplazar la psicoterapia"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La farmacoterapia en TLP se dirige principalmente a la estabilización emocional, el control de la impulsividad y el manejo de síntomas psicóticos transitorios."
+    },
+    {
+      "id": 139,
+      "question": "¿Qué clase de fármacos se recomiendan para tratar síntomas psicóticos transitorios, impulsividad y conductas suicidas en el TLP?",
+      "options": [
+        {"a": "ISRS"},
+        {"b": "Benzodiacepinas"},
+        {"c": "Antipsicóticos Atípicos"},
+        {"d": "Estabilizadores del ánimo (tipo Lamotrigina)"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los Antipsicóticos Atípicos son recomendados para tratar síntomas psicóticos, impulsividad y conductas suicidas."
+    },
+    {
+      "id": 140,
+      "question": "En el tratamiento del TLP, ¿qué fármacos se prefieren al Litio en pacientes con ideación suicida?",
+      "options": [
+        {"a": "Benzodiacepinas"},
+        {"b": "ISRS"},
+        {"c": "Carbamazepina o ácido valproico"},
+        {"d": "Antipsicóticos típicos"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Se prefiere la carbamazepina o el ácido valproico como alternativas más seguras al Litio en pacientes con ideación suicida."
+    },
+    {
+      "id": 141,
+      "question": "Los antidepresivos ISRS en el TLP se utilizan principalmente para tratar:",
+      "options": [
+        {"a": "Síntomas psicóticos"},
+        {"b": "Impulsividad"},
+        {"c": "Síntomas afectivos"},
+        {"d": "Conductas de riesgo"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los antidepresivos ISRS se utilizan para manejar los síntomas afectivos en el TLP."
+    },
+    {
+      "id": 142,
+      "question": "¿Cuál de los siguientes es un desafío común en la relación médico-paciente con personas que presentan TLP?",
+      "options": [
+        {"a": "Excesiva idealización del profesional"},
+        {"b": "Desconfianza hacia el profesional"},
+        {"c": "Adherencia total a las recomendaciones"},
+        {"d": "Poca expresión emocional"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Los pacientes suelen mostrar desconfianza hacia el médico. Otros desafíos incluyen resistencia a recomendaciones, conductas manipulativas, seducción/exigencias y ambivalencia."
+    },
+    {
+      "id": 143,
+      "question": "La tendencia a alternar rápidamente entre la idealización y la devaluación del médico es una característica de la relación terapéutica con pacientes que presentan:",
+      "options": [
+        {"a": "Trastorno Obsesivo-Compulsivo (TOC)"},
+        {"b": "Trastorno de Ansiedad Generalizada (TAG)"},
+        {"c": "Esquizofrenia"},
+        {"d": "Trastorno Límite de la Personalidad (TLP)"}
+      ],
+      "correct_answer": "d",
+      "explanation": "La ambivalencia en la relación, alternando entre idealización y devaluación, es una característica de los pacientes con TLP."
+    },
+    {
+      "id": 144,
+      "question": "Existe una reticencia significativa al uso de psicofármacos en pacientes jóvenes debido a la creencia de que los problemas mentales en esta etapa son causados principalmente por factores:",
+      "options": [
+        {"a": "Únicamente biológicos y genéticos"},
+        {"b": "Ambientales, familiares o sociales"},
+        {"c": "Relacionados con el desarrollo neurológico"},
+        {"d": "Asociados a la nutrición deficiente"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Existe la creencia de que los problemas mentales en la infancia/adolescencia son causados principalmente por factores ambientales, familiares o sociales."
+    },
+    {
+      "id": 145,
+      "question": "¿Aproximadamente qué porcentaje de trastornos mentales se manifiestan durante la infancia o adolescencia?",
+      "options": [
+        {"a": "10%"},
+        {"b": "20%"},
+        {"c": "50%"},
+        {"d": "75%"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Se estima que el 50% de los trastornos mentales se manifiestan durante la infancia o adolescencia."
+    },
+    {
+      "id": 146,
+      "question": "La adaptación de tratamientos psicofarmacológicos desarrollados para adultos para su uso en niños y adolescentes puede resultar en:",
+      "options": [
+        {"a": "Mayor eficacia"},
+        {"b": "Menos efectos secundarios"},
+        {"c": "Efectos adversos y complicaciones"},
+        {"d": "Necesidad de dosis mucho más altas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Muchos tratamientos infantojuveniles son adaptaciones de medicamentos para adultos, lo que puede resultar en efectos adversos y complicaciones."
+    },
+    {
+      "id": 147,
+      "question": "En niños, los psicofármacos tienden a metabolizarse más rápidamente que en adultos, lo que generalmente requiere:",
+      "options": [
+        {"a": "Disminuir las dosis"},
+        {"b": "Aumentar las dosis"},
+        {"c": "Ajustes en las dosis para lograr el efecto deseado"},
+        {"d": "Interrumpir el tratamiento temprano"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los psicofármacos tienden a metabolizarse más rápidamente en niños que en adultos, por lo que generalmente requieren ajustes en las dosis."
+    },
+    {
+      "id": 148,
+      "question": "La menor unión de los fármacos a los receptores en niños, en comparación con adultos, puede incrementar:",
+      "options": [
+        {"a": "La vida media del fármaco"},
+        {"b": "La absorción intestinal"},
+        {"c": "Los efectos adversos si no se ajustan las dosis"},
+        {"d": "La efectividad del tratamiento"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La menor unión a receptores permite que una mayor cantidad de fármaco permanezca circulando, pudiendo incrementar los efectos adversos si no se ajustan las dosis adecuadamente."
+    },
+    {
+      "id": 149,
+      "question": "Según las fuentes, ¿a qué edad alcanza su pico de funcionamiento el sistema serotoninérgico?",
+      "options": [
+        {"a": "Al nacer"},
+        {"b": "Alrededor de los 5 años"},
+        {"c": "En la adolescencia"},
+        {"d": "En la edad adulta"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La serotonina alcanza su pico de funcionamiento alrededor de los 5 años."
+    },
+    {
+      "id": 150,
+      "question": "¿Por qué los ISRN (Inhibidores Selectivos de la Recaptación de Noradrenalina) no son recomendables para niños según las fuentes?",
+      "options": [
+        {"a": "Son demasiado sedantes"},
+        {"b": "Pueden causar efectos paradojales"},
+        {"c": "El sistema noradrenérgico no está plenamente desarrollado"},
+        {"d": "Se metabolizan demasiado rápido"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los ISRN no son recomendables para niños, ya que este sistema (noradrenérgico) no está plenamente desarrollado."
+    },
+    {
+      "id": 151,
+      "question": "¿Qué fenómeno en el desarrollo dopaminérgico explica la susceptibilidad de los adolescentes a conductas impulsivas y de búsqueda de gratificación?",
+      "options": [
+        {"a": "Déficit de dopamina en la vía mesolímbica"},
+        {"b": "Predominio de la vía mesolímbica sobre la mesocortical"},
+        {"c": "Hipoactividad de la vía nigroestriada"},
+        {"d": "Mayor densidad de receptores D2"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Durante la infancia y adolescencia predomina la vía dopaminérgica mesolímbica sobre la mesocortical. Esta relación genera una alta sensibilidad a la recompensa en los adolescentes, explicando su susceptibilidad a conductas impulsivas y de búsqueda de gratificación."
+    },
+    {
+      "id": 152,
+      "question": "El uso de benzodiacepinas en niños puede tener efectos paradójicos (generando excitación en lugar de sedación) debido a que el GABA:",
+      "options": [
+        {"a": "Ejerce una función excitatoria en la infancia"},
+        {"b": "Aún no ejerce su función inhibitoria completamente"},
+        {"c": "Se une más fuertemente a receptores ionotrópicos"},
+        {"d": "Se metaboliza más rápido en niños"}
+      ],
+      "correct_answer": "b",
+      "explanation": "El GABA aún no ejerce su función inhibitoria completamente en la infancia y hasta la adolescencia, lo cual es fundamental para el crecimiento y maduración cerebral. Este es el motivo por el que el uso de benzodiacepinas en niños puede tener efectos paradójicos."
+    },
+    {
+      "id": 153,
+      "question": "¿Qué antipsicótico se menciona como eficaz en el tratamiento de síntomas psicóticos en niños y adolescentes, pero con un efecto sedante significativo que requiere ajuste de dosis?",
+      "options": [
+        {"a": "Quetiapina"},
+        {"b": "Aripiprazol"},
+        {"c": "Risperidona"},
+        {"d": "Clozapina"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Risperidona es eficaz en el tratamiento de los síntomas psicóticos, aunque tiene un efecto sedante significativo, por lo cual se debe ajustar la dosificación para minimizar la somnolencia."
+    },
+    {
+      "id": 154,
+      "question": "El Aripiprazol se describe como un agonista parcial de la dopamina y la serotonina, útil en casos de disfunción conductual sin psicosis plena en población infantojuvenil.",
+      "options": [
+        {"a": "Verdadero"},
+        {"b": "Falso"}
+      ],
+      "correct_answer": "a",
+      "explanation": "El Aripiprazol actúa como agonista parcial de la dopamina y la serotonina, regulando sus niveles en el cerebro. Es útil en casos de disfunción conductual sin psicosis plena."
+    },
+    {
+      "id": 155,
+      "question": "Una de las características del TEA (Trastorno del Espectro Autista) es la dificultad para comprender los estados mentales de los demás, lo que se conoce como déficit en la:",
+      "options": [
+        {"a": "Coherencia central débil"},
+        {"b": "Función ejecutiva"},
+        {"c": "Teoría de la Mente"},
+        {"d": "Memoria de trabajo"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los niños y adolescentes con TEA tienen dificultades para atribuir estados mentales a otras personas, es decir, carecen de una teoría de la mente adecuada."
+    },
+    {
+      "id": 156,
+      "question": "La dificultad para integrar la información en un contexto amplio, que afecta la comprensión de significados globales, se denomina en el TEA:",
+      "options": [
+        {"a": "Teoría de la Mente"},
+        {"b": "Ecolalia"},
+        {"c": "Coherencia central débil"},
+        {"d": "Intereses restringidos"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La coherencia central débil les impide integrar la información en un contexto amplio, lo que afecta su comprensión de significados globales."
+    },
+    {
+      "id": 157,
+      "question": "¿Qué fármaco antagonista opioide puede utilizarse en el tratamiento farmacológico del TEA para controlar ciertas conductas repetitivas características?",
+      "options": [
+        {"a": "Risperidona"},
+        {"b": "Naltrexona"},
+        {"c": "Metilfenidato"},
+        {"d": "Atomoxetina"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La Naltrexona puede utilizarse como antagonista opioide para controlar ciertos comportamientos repetitivos característicos del TEA."
+    },
+    {
+      "id": 158,
+      "question": "¿Cuál es el subtipo de TDAH (Trastorno por Déficit de Atención e Hiperactividad) más común y el que suele tener un mayor impacto en el rendimiento académico y las relaciones interpersonales?",
+      "options": [
+        {"a": "TDAH Predominantemente Inatento"},
+        {"b": "TDAH Predominantemente Hiperactivo-Impulsivo"},
+        {"c": "TDAH Combinado"},
+        {"d": "TDAH No Especificado"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El TDAH Combinado es el subtipo más común y el que suele tener un mayor impacto."
+    },
+    {
+      "id": 159,
+      "question": "La dificultad para mantener la atención en tareas o actividades, cometer errores frecuentes por descuido, y tener problemas para organizar actividades son características principales del subtipo de TDAH:",
+      "options": [
+        {"a": "Predominantemente Hiperactivo-Impulsivo"},
+        {"b": "Predominantemente Inatento"},
+        {"c": "Combinado"},
+        {"d": "Con conductas disruptivas"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Estas características describen el TDAH Predominantemente Inatento."
+    },
+    {
+      "id": 160,
+      "question": "¿Qué clase de fármacos se consideran uno de los enfoques más eficaces para el manejo de los síntomas del TDAH, especialmente cuando se combina con intervenciones psicopedagógicas y psicoterapéuticas?",
+      "options": [
+        {"a": "Antipsicóticos"},
+        {"b": "Estabilizadores del ánimo"},
+        {"c": "Estimulantes"},
+        {"d": "Benzodiacepinas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El tratamiento farmacológico con estimulantes es uno de los enfoques más eficaces para el manejo de los síntomas del TDAH."
+    },
+    {
+      "id": 161,
+      "question": "El Metilfenidato (Ritalin, Concerta) actúa en el TDAH inhibiendo la recaptación de qué neurotransmisores?",
+      "options": [
+        {"a": "Serotonina y Dopamina"},
+        {"b": "Dopamina y Noradrenalina"},
+        {"c": "Noradrenalina y Serotonina"},
+        {"d": "GABA y Glutamato"}
+      ],
+      "correct_answer": "b",
+      "explanation": "El Metilfenidato actúa inhibiendo la recaptación de dopamina y noradrenalina."
+    },
+    {
+      "id": 162,
+      "question": "¿Qué fármaco no estimulante para el TDAH es un inhibidor selectivo de la recaptación de noradrenalina, útil cuando los pacientes no toleran bien los estimulantes o tienen comorbilidades como ansiedad?",
+      "options": [
+        {"a": "Guanfacina"},
+        {"b": "Clonidina"},
+        {"c": "Atomoxetina"},
+        {"d": "Modafinilo"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Atomoxetina es un inhibidor selectivo de la recaptación de noradrenalina y es eficaz en estos casos."
+    },
+    {
+      "id": 163,
+      "question": "En casos de TDAH con irritabilidad y agitación severa, aunque no son tratamientos de primera línea, pueden utilizarse:",
+      "options": [
+        {"a": "Benzodiacepinas"},
+        {"b": "Antipsicóticos típicos"},
+        {"c": "Estabilizadores del Ánimo"},
+        {"d": "ISRN"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Estabilizadores del Ánimo como Carbamazepina y Valproato pueden utilizarse en casos de TDAH con síntomas de irritabilidad y agitación severa."
+    },
+    {
+      "id": 164,
+      "question": "Los Antipsicóticos Atípicos como Risperidona y Aripiprazol se utilizan en TDAH para tratar:",
+      "options": [
+        {"a": "Inatención y problemas de memoria"},
+        {"b": "Ansiedad y síntomas depresivos"},
+        {"c": "Agresividad, conductas disruptivas o comorbilidades"},
+        {"d": "Efectos secundarios de los estimulantes"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Son utilizados en casos de TDAH con síntomas de agresividad, conductas disruptivas o comorbilidades como el trastorno de conducta."
+    },
+    {
+      "id": 165,
+      "question": "En la elección del fármaco para el TDAH, si un paciente tiene problemas de ansiedad o antecedentes de abuso de sustancias, ¿qué tipo de fármacos pueden ser preferibles a los estimulantes?",
+      "options": [
+        {"a": "Antipsicóticos"},
+        {"b": "Estabilizadores del ánimo"},
+        {"c": "No estimulantes"},
+        {"d": "Benzodiacepinas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "En pacientes con problemas de ansiedad o antecedentes de abuso de sustancias, los no estimulantes pueden ser preferibles."
+    },
+    {
+      "id": 166,
+      "question": "Además del tratamiento farmacológico, ¿qué tipo de intervenciones se consideran esenciales a largo plazo para el éxito en el manejo del TDAH?",
+      "options": [
+        {"a": "Terapia electroconvulsiva"},
+        {"b": "Neurocirugía"},
+        {"c": "Terapias no farmacológicas (psicoterapia, modificación conducta, psicopedagogía)"},
+        {"d": "Tratamiento únicamente con suplementos"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La psicoterapia, la modificación de conducta y las intervenciones psicopedagógicas son esenciales a largo plazo."
+    },
+    {
+      "id": 167,
+      "question": "Los efectos secundarios a largo plazo de los antipsicóticos atípicos en niños que afectan el crecimiento y desarrollo incluyen:",
+      "options": [
+        {"a": "Retraso en el habla"},
+        {"b": "Efectos metabólicos significativos (aumento de peso, hiperglucemia)"},
+        {"c": "Alteraciones motoras permanentes"},
+        {"d": "Pérdida de audición"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Los efectos secundarios a largo plazo del uso prolongado de antipsicóticos atípicos en niños incluyen efectos metabólicos significativos (aumento de peso, hiperglucemia) que afectan el crecimiento/desarrollo."
+    },
+    {
+      "id": 168,
+      "question": "La sensación de opresión precordial (estrangulamiento o constricción), diferente del miedo a algo concreto, se relaciona con el concepto de:",
+      "options": [
+        {"a": "Ansiedad Rasgo"},
+        {"b": "Ansiedad Estado"},
+        {"c": "Angustia"},
+        {"d": "Fobia"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La angustia proviene de raíces griegas/latinas que significan estrangulamiento o constricción, refiriendo a una sensación de opresión precordial."
+    },
+    {
+      "id": 169,
+      "question": "La ansiedad patológica se presenta cuando el sujeto siente incapacidad para controlar su conducta y experimenta:",
+      "options": [
+        {"a": "Euforia y desinhibición"},
+        {"b": "Malestar intenso (agudo) o duradero (crónico)"},
+        {"c": "Falta de interés y motivación"},
+        {"d": "Alucinaciones auditivas"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La ansiedad patológica se presenta cuando el sujeto siente incapacidad para controlar su conducta y experimenta malestar intenso (agudo) o duradero (crónico)."
+    },
+    {
+      "id": 170,
+      "question": "¿Qué clase de fármacos son agonistas indirectos del GABA y tienen propiedades ansiolíticas, siendo los más importantes y utilizados?",
+      "options": [
+        {"a": "ISRS"},
+        {"b": "Antipsicóticos atípicos"},
+        {"c": "Benzodiacepinas (BZD)"},
+        {"d": "Estabilizadores del ánimo"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las benzodiacepinas son agonistas indirectos del GABA y tienen propiedades ansiolíticas, siendo los más importantes y utilizados."
+    },
+    {
+      "id": 171,
+      "question": "Los psicofármacos actúan sobre desequilibrios neuroquímicos en el cerebro buscando restaurar:",
+      "options": [
+        {"a": "La plasticidad sináptica"},
+        {"b": "La neurogénesis"},
+        {"c": "La homeostasis"},
+        {"d": "La atrofia cerebral"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los psicofármacos... actúan sobre desequilibrios neuroquímicos llevando a la homeostasis."
+    },
+    {
+      "id": 172,
+      "question": "Comprender los aspectos psicodinámicos del sujeto, el diagnóstico clínico y los efectos colaterales de los medicamentos es fundamental para:",
+      "options": [
+        {"a": "Acelerar el efecto terapéutico"},
+        {"b": "Evitar 'biologizar' los conflictos ni 'psicologizar' los efectos colaterales"},
+        {"c": "Reducir la necesidad de psicoterapia"},
+        {"d": "Aumentar el cumplimiento del tratamiento"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Es fundamental comprender los aspectos psicodinámicos del sujeto, el diagnóstico clínico y los efectos colaterales de los medicamentos, a fin de no 'biologizar' los conflictos ni 'psicologizar' los efectos colaterales."
+    },
+    {
+      "id": 173,
+      "question": "Según las fuentes, ¿aproximadamente qué porcentaje de pacientes con esquizofrenia resistente no responden a la Clozapina?",
+      "options": [
+        {"a": "25%"},
+        {"b": "40%"},
+        {"c": "60%"},
+        {"d": "75%"}
+      ],
+      "correct_answer": "b",
+      "explanation": "De los pacientes que no responden a otros dos antipsicóticos (resistentes), el 40% no responde a Clozapina."
+    },
+    {
+      "id": 174,
+      "question": "Se determina resistencia en esquizofrenia tras el fallo de:",
+      "options": [
+        {"a": "Un antipsicótico típico a dosis altas"},
+        {"b": "Un antipsicótico atípico a dosis altas"},
+        {"c": "2 antipsicóticos atípicos + 1 típico a dosis altas"},
+        {"d": "Cualquier combinación de fármacos durante 6 meses"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Determinar resistencia: Fallo de 2 atípicos + 1 típico a dosis altas."
+    },
+    {
+      "id": 175,
+      "question": "¿Cuánto tiempo dura aproximadamente un ciclo completo de fases del sueño según las fuentes?",
+      "options": [
+        {"a": "60 minutos"},
+        {"b": "90 minutos"},
+        {"c": "120 minutos"},
+        {"d": "Toda la noche"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Un ciclo completo dura 90 minutos."
+    },
+    {
+      "id": 176,
+      "question": "La poiquilotermia (falta de regulación de la temperatura corporal) ocurre durante qué fase del sueño?",
+      "options": [
+        {"a": "Fase 1 NREM"},
+        {"b": "Fase 4 NREM"},
+        {"c": "Fase REM"},
+        {"d": "Durante el despertar"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La poiquilotermia (no hay regulación Tº) ocurre durante la fase REM."
+    },
+    {
+      "id": 177,
+      "question": "¿En qué fase del sueño se produce la secreción de hormona del crecimiento?",
+      "options": [
+        {"a": "Fase REM"},
+        {"b": "Fase 1 NREM"},
+        {"c": "Fase 2 NREM"},
+        {"d": "Fases NREM (especialmente 3 y 4, aunque la fuente solo dice NREM)"}
+      ],
+      "correct_answer": "d",
+      "explanation": "La secreción de hormona del crecimiento ocurre en la fase NREM."
+    },
+    {
+      "id": 178,
+      "question": "¿Cuál es la prevalencia estimada del TLP (Trastorno Límite de la Personalidad) en la población general?",
+      "options": [
+        {"a": "Menos del 1%"},
+        {"b": "1-2%"},
+        {"c": "5%"},
+        {"d": "10%"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La prevalencia es de 1-2% de la población general."
+    },
+    {
+      "id": 179,
+      "question": "Según las fuentes, ¿aproximadamente qué porcentaje de pacientes hospitalizados presenta TLP?",
+      "options": [
+        {"a": "10%"},
+        {"b": "20%"},
+        {"c": "30%"},
+        {"d": "70%"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La prevalencia es del 20% de los pacientes ingresados."
+    },
+    {
+      "id": 180,
+      "question": "En el TLP, los estados de hiperactivación conllevan que la corteza prefrontal no logre moderar:",
+      "options": [
+        {"a": "Los síntomas psicóticos"},
+        {"b": "La impulsividad"},
+        {"c": "Los mecanismos emocionales"},
+        {"d": "La necesidad de atención"}
+      ],
+      "correct_answer": "c",
+      "explanation": "En el TLP, los estados de hiperactivación conllevan que la corteza prefrontal no logre moderar los mecanismos emocionales."
+    },
+    {
+      "id": 181,
+      "question": "En el TLP, los estabilizadores del humor están indicados principalmente para tratar:",
+      "options": [
+        {"a": "La sensación de vacío"},
+        {"b": "El miedo al abandono"},
+        {"c": "La conducta impulsiva (agresión, riesgo, ingesta, sustancias)"},
+        {"d": "Las distorsiones cognitivas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Son indicados para la conducta impulsiva: agresión impulsiva, conducta de riesgo, descontrol de ingesta, uso de sustancias."
+    },
+    {
+      "id": 182,
+      "question": "Aunque el Litio es el estabilizador más estudiado en TLP, se prefieren la Carbamazepina o el Ácido Valproico en pacientes con:",
+      "options": [
+        {"a": "Ciclación rápida"},
+        {"b": "Síntomas depresivos predominantes"},
+        {"c": "Ideación suicida"},
+        {"d": "Aumento de peso"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Se prefieren la carbamazepina o el ácido valproico en pacientes con ideación suicida."
+    },
+    {
+      "id": 183,
+      "question": "¿Qué modelo teórico propone que los trastornos mentales son el resultado de la interacción entre factores biológicos, psicológicos y sociales?",
+      "options": [
+        {"a": "Modelo Cognitivo-Conductual"},
+        {"b": "Modelo Psicodinámico"},
+        {"c": "Modelo Bio-Psico-Social"},
+        {"d": "Modelo Diátesis-Estrés"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El Modelo Bio-Psico-Social propone que los trastornos mentales son el resultado de la interacción entre factores biológicos (genética, neuroquímica), psicológicos (pensamientos, emociones) y sociales (entorno, cultura)."
+    },
+    {
+      "id": 184,
+      "question": "Para el tratamiento de los trastornos mentales, las fuentes sugieren que se requiere un enfoque:",
+      "options": [
+        {"a": "Exclusivamente farmacológico"},
+        {"b": "Exclusivamente psicoterapéutico"},
+        {"c": "Interdisciplinario que incluya intervenciones psicofarmacológicas y psicoterapéuticas"},
+        {"d": "Basado únicamente en la remisión de síntomas"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El tratamiento de los trastornos mentales requiere un enfoque interdisciplinario que incluya tanto intervenciones psicofarmacológicas como psicoterapéuticas."
+    },
+    {
+      "id": 185,
+      "question": "La comunicación entre neuronas en una sinapsis química se produce a través de:",
+      "options": [
+        {"a": "Contacto físico directo"},
+        {"b": "La liberación de neurotransmisores en la hendidura sináptica"},
+        {"c": "Señales eléctricas únicamente"},
+        {"d": "La formación de nuevas células nerviosas"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La comunicación entre neuronas se produce a través de sinapsis químicas que utilizan neurotransmisores."
+    },
+    {
+      "id": 186,
+      "question": "¿Cuánto dura aproximadamente el retraso sináptico en una sinapsis química?",
+      "options": [
+        {"a": "0.05 ms"},
+        {"b": "0.5 ms"},
+        {"c": "5 ms"},
+        {"d": "50 ms"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Un ligero retraso ocurre debido al proceso de liberación y recepción del NT (aproximadamente 0.5 ms)."
+    },
+    {
+      "id": 187,
+      "question": "¿Qué área cerebral está implicada en la vigilancia y el pánico, cuya estimulación puede provocar ataques de pánico?",
+      "options": [
+        {"a": "Corteza prefrontal"},
+        {"b": "Hipocampo"},
+        {"c": "Amígdala"},
+        {"d": "Locus coeruleus"}
+      ],
+      "correct_answer": "d",
+      "explanation": "El Locus coeruleus está implicado en la vigilancia y el pánico. La estimulación de esta área provoca ataques de pánico."
+    },
+    {
+      "id": 188,
+      "question": "La amígdala y el hipocampo están involucrados en los trastornos de ansiedad relacionados con:",
+      "options": [
+        {"a": "El control motor"},
+        {"b": "La regulación de la prolactina"},
+        {"c": "La ansiedad anticipatoria y la respuesta al estrés"},
+        {"d": "El procesamiento de la información visual"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La amígdala e hipocampo están involucrados en la ansiedad anticipatoria y la respuesta al estrés."
+    },
+    {
+      "id": 189,
+      "question": "Según las fuentes, ¿cuál de las siguientes clases de fármacos se encuentra entre los antidepresivos de primera elección hoy en día debido a su perfil de tolerancia y seguridad superior, en comparación con los tricíclicos?",
+      "options": [
+        {"a": "Antipsicóticos atípicos"},
+        {"b": "Benzodiacepinas"},
+        {"c": "Inhibidores Selectivos de la Recaptación de Serotonina (ISRS)"},
+        {"d": "Barbitúricos"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los antidepresivos de primera elección hoy en día incluyen ISRS, mirtazapina, venlafaxina, bupropión, duloxetina y agomelatina, ya que han demostrado un perfil de tolerancia y seguridad superior. Los ISRS se impusieron sobre los tricíclicos."
+    },
+    {
+      "id": 190,
+      "question": "El mecanismo de acción principal de los antidepresivos ISRS implica el bloqueo del transportador de:",
+      "options": [
+        {"a": "Dopamina"},
+        {"b": "Noradrenalina"},
+        {"c": "Serotonina"},
+        {"d": "Glutamato"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Los ISRS actúan bloqueando el transportador de Serotonina."
+    },
+    {
+      "id": 191,
+      "question": "A diferencia del Trastorno de Pánico, el TAG se caracteriza por una preocupación crónica y excesiva sobre:",
+      "options": [
+        {"a": "Eventos traumáticos pasados"},
+        {"b": "Situaciones sociales específicas"},
+        {"c": "La posibilidad de tener nuevos ataques de pánico"},
+        {"d": "Varias situaciones de la vida diaria"}
+      ],
+      "correct_answer": "d",
+      "explanation": "El TAG se caracteriza por una preocupación crónica y excesiva sobre varias situaciones de la vida diaria, a diferencia del pánico que se centra en los ataques."
+    },
+    {
+      "id": 192,
+      "question": "¿Qué trastorno de ansiedad se caracteriza por episodios repentinos e inesperados de miedo intenso conocidos como ataques de pánico?",
+      "options": [
+        {"a": "Trastorno de Ansiedad Generalizada (TAG)"},
+        {"b": "Fobia Social"},
+        {"c": "Trastorno de Pánico"},
+        {"d": "Trastorno de Estrés Agudo (TEA)"}
+      ],
+      "correct_answer": "c",
+      "explanation": "El Trastorno de Pánico se caracteriza por ataques de pánico recurrentes e inesperados."
+    },
+    {
+      "id": 193,
+      "question": "La Dosis Efectiva 50 (ED50) en una curva dosis-respuesta representa la dosis necesaria para producir:",
+      "options": [
+        {"a": "El efecto máximo del fármaco"},
+        {"b": "El 50% de los efectos adversos"},
+        {"c": "El 50% del efecto máximo"},
+        {"d": "El 100% de la respuesta clínica"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La ED50 es la dosis necesaria para producir el 50% del efecto máximo."
+    },
+    {
+      "id": 194,
+      "question": "¿Qué proceso farmacocinético se refiere a la eliminación del fármaco del cuerpo, principalmente por los riñones?",
+      "options": [
+        {"a": "Absorción"},
+        {"b": "Distribución"},
+        {"c": "Metabolismo"},
+        {"d": "Excreción"}
+      ],
+      "correct_answer": "d",
+      "explanation": "La Excreción es la eliminación del fármaco del cuerpo, principalmente por los riñones."
+    },
+    {
+      "id": 195,
+      "question": "Los receptores ionotrópicos, activados por neurotransmisores como Glutamato o GABA, generan una respuesta neuronal:",
+      "options": [
+        {"a": "Lenta y prolongada"},
+        {"b": "Rápida y de corta duración"},
+        {"c": "Mediada por proteínas G"},
+        {"d": "Que implica la síntesis de nuevas proteínas"}
+      ],
+      "correct_answer": "b",
+      "explanation": "Al unirse un neurotransmisor como el glutamato o GABA, se abre el canal iónico para permitir el paso de iones, lo que genera una respuesta rápida y de corta duración."
+    },
+    {
+      "id": 196,
+      "question": "Los receptores metabotrópicos, activados por neurotransmisores como la Dopamina, desencadenan cascadas de señales intracelulares generando respuestas:",
+      "options": [
+        {"a": "Únicamente excitatorias"},
+        {"b": "Únicamente inhibitorias"},
+        {"c": "Muy rápidas y localizadas"},
+        {"d": "Más complejas y prolongadas"}
+      ],
+      "correct_answer": "d",
+      "explanation": "Estos receptores activan una cascada de señales intracelulares a través de proteínas G, desencadenando respuestas celulares más complejas y prolongadas."
+    },
+    {
+      "id": 197,
+      "question": "Antes del uso extendido de las benzodiacepinas, ¿qué clase de fármacos se utilizaban comúnmente como ansiolíticos y sedantes, pero fueron reemplazados debido a su alto riesgo de sobredosis y adicción?",
+      "options": [
+        {"a": "ISRS"},
+        {"b": "Tricíclicos"},
+        {"c": "Barbitúricos"},
+        {"d": "IMAO"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Antes de las benzodiacepinas, los barbitúricos eran comúnmente utilizados, pero fueron reemplazados debido a su alto riesgo de sobredosis y adicción."
+    },
+    {
+      "id": 198,
+      "question": "La Psicofarmacología es la rama de la farmacología que se centra en el estudio de:",
+      "options": [
+        {"a": "Las interacciones entre medicamentos"},
+        {"b": "Los efectos de los fármacos sobre el sistema nervioso y su uso en trastornos mentales"},
+        {"c": "El diseño de nuevos fármacos"},
+        {"d": "La toxicidad de las sustancias"}
+      ],
+      "correct_answer": "b",
+      "explanation": "La Psicofarmacología es la rama de la farmacología que se centra en el estudio de los efectos de los fármacos sobre el sistema nervioso y su uso en el tratamiento de los trastornos mentales."
+    },
+    {
+      "id": 199,
+      "question": "¿Qué término se refiere al tiempo necesario para que la concentración plasmática de un fármaco se reduzca a la mitad?",
+      "options": [
+        {"a": "Absorción"},
+        {"b": "Latencia terapéutica"},
+        {"c": "Vida Media"},
+        {"d": "Excreción"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La Vida Media es el tiempo necesario para que la concentración plasmática de un fármaco se reduzca a la mitad."
+    },
+    {
+      "id": 200,
+      "question": "El proceso de Farmacocinética se resume con el acrónimo ADME, que incluye:",
+      "options": [
+        {"a": "Administración, Dosificación, Metabolismo, Efectividad"},
+        {"b": "Absorción, Distribución, Mecanismo de acción, Excreción"},
+        {"c": "Absorción, Distribución, Metabolismo, Eliminación"},
+        {"d": "Absorción, Distribución, Metabolismo, Excreción"}
+      ],
+      "correct_answer": "d",
+      "explanation": "La Farmacocinética se resume con el acrónimo ADME: Absorción, Distribución, Metabolismo, Excreción."
+    },
+    {
+      "id": 201,
+      "question": "Según las fuentes, en el Trastorno Obsesivo-Compulsivo (TOC), ¿qué tipo de actos son descritos como fijos y pautados por reglas propias, pero que el sujeto realiza sin un propósito aparente claro como en las compulsiones?",
+      "options": [
+        {"a": "Ideas obsesivas"},
+        {"b": "Necesidad de simetría"},
+        {"c": "Actos estereotipados ('manías')"},
+        {"d": "Comportamientos de coleccionismo"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La fuente menciona los 'actos estereotipados (\"manías\")' con estas características, distinguiéndolos implícitamente de las compulsiones cuyo propósito es atenuar la ansiedad."
+    },
+    {
+      "id": 202,
+      "question": "De acuerdo con los principios de la farmacoterapia listados en las fuentes, ¿cuál de los siguientes factores es específicamente mencionado como relevante para determinar la intervención farmacológica?",
+      "options": [
+        {"a": "La edad del paciente"},
+        {"b": "La latencia terapéutica del fármaco"},
+        {"c": "La fase en que se encuentra el trastorno"},
+        {"d": "Los efectos secundarios graves del fármaco"}
+      ],
+      "correct_answer": "c",
+      "explanation": "Las fuentes listan explícitamente que 'La fase en que se encuentra el trastorno es relevante para determinar la intervención'."
+    },
+    {
+      "id": 203,
+      "question": "Según las fuentes, ¿cuál es la razón principal por la que resulta fundamental diferenciarse de los criterios del autismo infantil al estudiar la esquizofrenia infantojuvenil?",
+      "options": [
+        {"a": "Los síntomas positivos son idénticos en ambos trastornos"},
+        {"b": "Ambos trastornos son igualmente resistentes al tratamiento farmacológico"},
+        {"c": "Existe una coincidencia de características y en al menos 20 genes candidatos entre ambos"},
+        {"d": "El retraso en el habla solo se presenta en la esquizofrenia infantil"}
+      ],
+      "correct_answer": "c",
+      "explanation": "La fuente señala que uno de los desafíos fundamentales es 'Diferenciarse de los criterios del autismo infantil: Hay una coincidencia de características y en al menos 20 genes candidatos'."
+    }
+  ];
+
+
+        // --- DOM Element References ---
+        const questionElement = document.getElementById('question');
+        const optionsElement = document.getElementById('options');
+        const feedbackElement = document.getElementById('feedback');
+        const explanationOverlay = document.getElementById('explanation-overlay');
+        const explanationTextElement = document.getElementById('explanation-text-content');
+        const scoreElement = document.getElementById('score');
+        const scorePulseElement = document.getElementById('score-pulse');
+        const bodyElement = document.body;
+        const gameContainer = document.querySelector('.game-container');
+        const imageOverlay = document.getElementById('image-overlay');
+        const pexelsImage = document.getElementById('pexels-image');
+        const catContainer = document.getElementById('cat-container');
+        const comboCounterElement = document.getElementById('combo-counter');
+        const rootElement = document.documentElement;
+
+        // --- Game State Variables ---
+        let currentQuestionIndex = 0, score = 0, consecutiveCorrectAnswers = 0;
+        let questionsAvailable = [...questions];
+        let isShowingImage = false, isShowingExplanation = false;
+        let cats = [], catFaceImageUrls = [], isFetchingCatFaces = false;
+        let animationFrameId = null, gameReady = false, worldShakeIntensity = 0;
+        let mouseConstraint;
+
+        // --- Audio Context Setup ---
+        let audioCtx = null, isAudioInitialized = false;
+        // Functions initAudio, playSound, playSoundInternal (remain unchanged)
+        function initAudio() {
+             if (!isAudioInitialized && (window.AudioContext || window.webkitAudioContext)) {
+                 try {
+                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                     if (audioCtx.state === 'suspended') {
+                         audioCtx.resume().then(() => console.log("Audio Context resumed on init.")).catch(e => console.error("Error resuming Audio Context on init:", e));
+                     }
+                     isAudioInitialized = true; console.log("Audio Context Initialized or attempting resume.");
+                 } catch (e) { console.error("Error creating Audio Context:", e); isAudioInitialized = false; }
+             }
+        }
+        function playSound(type) {
+             if (!isAudioInitialized || !audioCtx) { if (!isAudioInitialized) initAudio(); if (!isAudioInitialized || !audioCtx) return; }
+             const play = () => playSoundInternal(type);
+             if (audioCtx.state === 'suspended') { audioCtx.resume().then(() => { play(); }).catch(e => console.error("Error resuming Audio Context in playSound:", e)); }
+             else if (audioCtx.state === 'running') { play(); }
+             else { console.warn(`Cannot play sound, audio context state is: ${audioCtx.state}`); }
+        }
+        function playSoundInternal(type){
+             if (!audioCtx || audioCtx.state !== 'running') { return; }
+             try {
+                 const oscillator = audioCtx.createOscillator(); const gainNode = audioCtx.createGain();
+                 oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
+                 const now = audioCtx.currentTime; oscillator.start(now); gainNode.gain.setValueAtTime(0.2, now);
+                 if (type === 'correct') {
+                     oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(440, now); gainNode.gain.exponentialRampToValueAtTime(0.4, now + 0.05); oscillator.frequency.exponentialRampToValueAtTime(880, now + 0.15); gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.3); oscillator.stop(now + 0.35);
+                 } else if (type === 'incorrect') {
+                     oscillator.type = 'square'; oscillator.frequency.setValueAtTime(110, now); gainNode.gain.exponentialRampToValueAtTime(0.3, now + 0.02); gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.2); oscillator.stop(now + 0.25);
+                 } else if (type === 'eat') { // NEW: Sound for eating
+                     oscillator.type = 'sawtooth';
+                     oscillator.frequency.setValueAtTime(150, now);
+                     gainNode.gain.exponentialRampToValueAtTime(0.15, now + 0.03);
+                     oscillator.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                     gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+                     oscillator.stop(now + 0.2);
+                 }
+                 oscillator.onended = () => { try { if (oscillator.numberOfOutputs > 0) oscillator.disconnect(); if (gainNode.numberOfOutputs > 0) gainNode.disconnect(); } catch (e) { /* Ignore */ } };
+             } catch (error) { console.error("Error playing sound internal:", error); }
+        }
+
+        // --- Matter.js Physics Setup ---
+        let engine, world, runner, ground, leftWall, rightWall;
+
+        function setupPhysics() {
+             console.log("Setting up physics...");
+             if (runner) Runner.stop(runner);
+             if (engine) {
+                 Events.off(engine, 'beforeUpdate', applyWorldShake);
+                 // NEW: Remove collision listener if engine exists
+                 Events.off(engine, 'collisionStart', handleCatCollisions);
+                 Engine.clear(engine);
+             }
+             if (world) World.clear(world, false);
+             if (animationFrameId) cancelAnimationFrame(animationFrameId); animationFrameId = null;
+             mouseConstraint = null;
+             engine = Engine.create(); world = engine.world;
+             engine.gravity.y = 0.8; engine.gravity.x = 0; engine.enableSleeping = false;
+             console.log("New physics engine and world created.");
+             const wallThickness = 50; const width = window.innerWidth; const height = window.innerHeight;
+             ground = Bodies.rectangle(width / 2, height + wallThickness / 2, width, wallThickness, { isStatic: true, label: 'ground', collisionFilter: { category: 0x0001 } });
+             leftWall = Bodies.rectangle(-wallThickness / 2, height / 2, wallThickness, height, { isStatic: true, label: 'leftWall', collisionFilter: { category: 0x0001 } });
+             rightWall = Bodies.rectangle(width + wallThickness / 2, height / 2, wallThickness, height, { isStatic: true, label: 'rightWall', collisionFilter: { category: 0x0001 } });
+             Composite.add(world, [ground, leftWall, rightWall]); console.log("Physics boundaries added.");
+             const mouse = Mouse.create(bodyElement);
+             mouseConstraint = MouseConstraint.create(engine, { mouse: mouse, constraint: { stiffness: 0.1, render: { visible: false } } });
+             mouseConstraint.collisionFilter.mask = CAT_CATEGORY;
+             Composite.add(world, mouseConstraint); engine.mouseConstraint = mouseConstraint;
+             console.log("Mouse constraint added for cat dragging.");
+
+             // NEW: Add collision listener
+             Events.on(engine, 'collisionStart', handleCatCollisions);
+             console.log("Added collision listener for cats.");
+
+             Events.on(engine, 'beforeUpdate', applyWorldShake); console.log("Added physics event listener for shake.");
+             runner = Runner.create(); Runner.run(runner, engine); console.log("Physics runner started.");
+             updateVisualsLoop(); console.log("Visual update loop started.");
+        }
+        // Function applyWorldShake (remains unchanged)
+        function applyWorldShake(event) {
+            if (!engine || !world || worldShakeIntensity <= 0 || cats.length === 0) return;
+            const forceMagnitude = worldShakeIntensity * SHAKE_FORCE_MAGNITUDE;
+            cats.forEach(catData => {
+                if (catData && catData.body && Composite.get(world, catData.body.id, 'body')) {
+                    if (mouseConstraint && mouseConstraint.body === catData.body) return;
+                    const catBody = catData.body; const forceX = (Math.random() - 0.5) * 2 * forceMagnitude; const forceY = (Math.random() - 0.5) * 2 * forceMagnitude;
+                    try { Body.applyForce(catBody, catBody.position, { x: forceX, y: forceY }); } catch (error) { console.warn("Error applying shake force:", error, catBody); }
+                }
+            });
+        }
+        // UPDATED: updateVisualsLoop uses cat.size for dimensions and centering
+        function updateVisualsLoop() {
+             if (cats && cats.length > 0) {
+                 cats.forEach(cat => {
+                     // Check if cat and its properties are valid
+                     if (!cat || !cat.body || !cat.element || !cat.body.position || !cat.body.vertices || !world || !Composite.get(world, cat.body.id, 'body')) {
+                         if (cat && cat.element) cat.element.remove();
+                         const indexToRemove = cats.findIndex(c => c === cat);
+                         if (indexToRemove > -1) cats.splice(indexToRemove, 1);
+                         return;
+                     }
+                     try {
+                         // Update element size based on tracked size
+                         cat.element.style.width = `${cat.size}px`;
+                         cat.element.style.height = `${cat.size}px`;
+                         // Update transform using tracked size for centering
+                         cat.element.style.transform = `translate(${cat.body.position.x - cat.size / 2}px, ${cat.body.position.y - cat.size / 2}px) rotate(${cat.body.angle}rad)`;
+                     } catch (e) { console.warn("Error updating cat visual:", e, cat); }
+                 });
+             }
+             animationFrameId = requestAnimationFrame(updateVisualsLoop);
+        }
+        // Function handleResize (remains unchanged)
+        function handleResize() {
+             if (!engine || !world || !ground || !leftWall || !rightWall) return;
+             try {
+                 const width = window.innerWidth; const height = window.innerHeight; const wallThickness = 50;
+                 Body.setPosition(ground, { x: width / 2, y: height + wallThickness / 2 }); Body.setVertices(ground, Matter.Vertices.fromPath(`L ${-width/2} ${-wallThickness/2} L ${width/2} ${-wallThickness/2} L ${width/2} ${wallThickness/2} L ${-width/2} ${wallThickness/2}`));
+                 Body.setPosition(leftWall, { x: -wallThickness / 2, y: height / 2 }); Body.setVertices(leftWall, Matter.Vertices.fromPath(`L ${-wallThickness/2} ${-height/2} L ${wallThickness/2} ${-height/2} L ${wallThickness/2} ${height/2} L ${-wallThickness/2} ${height/2}`));
+                 Body.setPosition(rightWall, { x: width + wallThickness / 2, y: height / 2 }); Body.setVertices(rightWall, Matter.Vertices.fromPath(`L ${-wallThickness/2} ${-height/2} L ${wallThickness/2} ${-height/2} L ${wallThickness/2} ${height/2} L ${-wallThickness/2} ${height/2}`));
+                 console.log("Physics bounds updated on resize.");
+             } catch (error) { console.error("Error updating bounds on resize:", error); }
+        }
+        window.addEventListener('resize', handleResize);
+
+        // --- Pexels API Functions ---
+        // Functions fetchCatFaceImages, fetchAndShowPexelsImage (remain unchanged)
+        async function fetchCatFaceImages() {
+             if (isFetchingCatFaces || !PEXELS_API_KEY || PEXELS_API_KEY === 'TU_API_KEY_DE_PEXELS_AQUI') { if (!PEXELS_API_KEY || PEXELS_API_KEY === 'TU_API_KEY_DE_PEXELS_AQUI') console.warn("fetchCatFaceImages: Pexels API key missing/placeholder."); return; }
+             isFetchingCatFaces = true; console.log("Fetching cat face images...");
+             try {
+                 const response = await fetch(PEXELS_CATFACE_URL, { headers: { 'Authorization': PEXELS_API_KEY } });
+                 if (!response.ok) { console.error(`Pexels Cat Face API Error: ${response.status} ${response.statusText}. Check Key.`); catFaceImageUrls = []; }
+                 else { const data = await response.json(); if (data.photos && data.photos.length > 0) { catFaceImageUrls = data.photos.map(photo => photo.src.medium || photo.src.small || photo.src.large); console.log(`Fetched ${catFaceImageUrls.length} cat faces.`); } else { console.warn("No cat faces found."); catFaceImageUrls = []; } }
+             } catch (error) { console.error('Error fetching cat faces:', error); catFaceImageUrls = []; } finally { isFetchingCatFaces = false; }
+        }
+        async function fetchAndShowPexelsImage() {
+             if (isShowingImage || !PEXELS_API_KEY || PEXELS_API_KEY === 'TU_API_KEY_DE_PEXELS_AQUI') { if (!PEXELS_API_KEY || PEXELS_API_KEY === 'TU_API_KEY_DE_PEXELS_AQUI') console.warn("fetchAndShowPexelsImage: Pexels API key missing/placeholder."); return; }
+             isShowingImage = true; console.log("Fetching Pexels image...");
+             pexelsImage.style.display = 'none'; pexelsImage.onload = null; pexelsImage.onerror = null; let response;
+             try {
+                 response = await fetch(PEXELS_FUNNY_URL, { headers: { 'Authorization': PEXELS_API_KEY } });
+                 if (!response.ok) { let errorBody = ''; try { errorBody = await response.text(); } catch (e) {} console.error(`Pexels API Error: ${response.status} ${response.statusText}. Body: ${errorBody}. Check Key/Limits.`); isShowingImage = false; return; }
+                 const data = await response.json();
+                 if (data.photos && data.photos.length > 0) {
+                     const randomIndex = Math.floor(Math.random() * data.photos.length); const randomPhoto = data.photos[randomIndex];
+                     if (!randomPhoto || !randomPhoto.src || !(randomPhoto.src.large || randomPhoto.src.medium)) { console.warn("Selected photo missing src:", randomPhoto); isShowingImage = false; return; }
+                     const imageUrl = randomPhoto.src.large || randomPhoto.src.medium;
+                     const handleImageLoad = () => { pexelsImage.style.display = 'block'; imageOverlay.style.display = 'flex'; requestAnimationFrame(() => { imageOverlay.style.opacity = '1'; }); };
+                     const handleImageError = (event) => { console.error("Error loading image via <img>:", pexelsImage.src, event); imageOverlay.style.display = 'none'; imageOverlay.style.opacity = '0'; pexelsImage.style.display = 'none'; isShowingImage = false; pexelsImage.onload = null; pexelsImage.onerror = null; };
+                     pexelsImage.onload = handleImageLoad; pexelsImage.onerror = handleImageError; pexelsImage.src = imageUrl;
+                 } else { console.warn("No 'funny' photos found."); isShowingImage = false; }
+             } catch (error) { console.error('Error during Pexels fetch call:', error); isShowingImage = false; imageOverlay.style.display = 'none'; imageOverlay.style.opacity = '0'; pexelsImage.style.display = 'none'; pexelsImage.onload = null; pexelsImage.onerror = null; }
+        }
+
+        // --- Falling Cat Functions ---
+        function createFallingCat() {
+             if (cats.length >= MAX_CATS || !engine || !world || !runner || !runner.enabled) { if (!engine || !world || !runner || !runner.enabled) console.error("Cannot create cat: Physics not ready."); return; }
+             createFallingCatInternal();
+        }
+        // UPDATED: createFallingCatInternal stores rarity and size
+        function createFallingCatInternal() {
+             const catElement = document.createElement('div');
+             catElement.classList.add('cat');
+             let catGlowClass = 'none';
+             let catRarity = CAT_RARITY['none'];
+
+             const hasGlow = Math.random() < GLOW_CHANCE;
+             if (hasGlow) {
+                 const colorRoll = Math.random(); let cumulativeProb = 0;
+                 if (colorRoll < (cumulativeProb += GLOW_COLOR_PROBABILITIES.gray)) { catGlowClass = 'glow-gray'; }
+                 else if (colorRoll < (cumulativeProb += GLOW_COLOR_PROBABILITIES.green)) { catGlowClass = 'glow-green'; }
+                 else if (colorRoll < (cumulativeProb += GLOW_COLOR_PROBABILITIES.blue)) { catGlowClass = 'glow-blue'; }
+                 else if (colorRoll < (cumulativeProb += GLOW_COLOR_PROBABILITIES.violet)) { catGlowClass = 'glow-violet'; }
+                 else if (colorRoll < (cumulativeProb += GLOW_COLOR_PROBABILITIES.orange)) { catGlowClass = 'glow-orange'; }
+
+                 if (catGlowClass !== 'none') {
+                     catElement.classList.add(catGlowClass);
+                     catRarity = CAT_RARITY[catGlowClass];
+                 }
+             }
+
+             if (catFaceImageUrls.length > 0) { const randomFaceUrl = catFaceImageUrls[Math.floor(Math.random() * catFaceImageUrls.length)]; catElement.style.backgroundImage = `url('${randomFaceUrl}')`; }
+             else { const randomHue = Math.random() * 360; catElement.style.backgroundColor = `hsl(${randomHue}, 70%, 60%)`; }
+
+             const currentSize = INITIAL_CAT_SIZE; // Start with initial size
+             catElement.style.width = `${currentSize}px`; // Set initial size on element
+             catElement.style.height = `${currentSize}px`;
+
+             catContainer.appendChild(catElement);
+             const initialX = Math.random() * (window.innerWidth - currentSize) + currentSize / 2;
+             const initialY = -currentSize * 2;
+
+             const catBody = Bodies.circle(initialX, initialY, currentSize / 2, {
+                 restitution: 0.6, friction: 0.1, frictionAir: 0.01, density: 0.005, label: 'cat',
+                 collisionFilter: { category: CAT_CATEGORY },
+                 // Store rarity and initial size directly on the body for easy access in collisions
+                 rarity: catRarity,
+                 currentSize: currentSize
+             });
+
+             Body.setAngularVelocity(catBody, (Math.random() - 0.5) * 0.2);
+             try {
+                 Composite.add(world, catBody);
+                 // Store reference to body, element, rarity, and CURRENT size in the main array
+                 cats.push({ body: catBody, element: catElement, rarity: catRarity, size: currentSize });
+             } catch (error) { console.error("Error adding cat body:", error); catElement.remove(); }
+        }
+        // Function resetCats (remains unchanged)
+        function resetCats() {
+             console.log(`Resetting ${cats.length} cats.`); const bodiesToRemove = cats.map(catData => catData.body).filter(Boolean);
+             if (world && bodiesToRemove.length > 0) { try { Composite.remove(world, bodiesToRemove); } catch (error) { console.error("Error removing cat bodies:", error); } }
+             catContainer.innerHTML = ''; cats = []; console.log("Cats reset complete.");
+        }
+
+        // --- NEW: Cat Collision and Eating Logic ---
+        function handleCatCollisions(event) {
+            // Only process collisions if a cat is being dragged
+            if (!mouseConstraint || !mouseConstraint.body || mouseConstraint.body.label !== 'cat') {
+                return;
+            }
+
+            const pairs = event.pairs;
+            const draggedBody = mouseConstraint.body;
+
+            pairs.forEach(pair => {
+                let otherBody = null;
+                let potentialEater = null;
+
+                // Check if the current dragged body is involved and the other is a cat
+                if (pair.bodyA === draggedBody && pair.bodyB.label === 'cat') {
+                    otherBody = pair.bodyB;
+                    potentialEater = pair.bodyA; // The dragged one is the potential eater
+                } else if (pair.bodyB === draggedBody && pair.bodyA.label === 'cat') {
+                    otherBody = pair.bodyA;
+                    potentialEater = pair.bodyB; // The dragged one is the potential eater
+                }
+
+                // Proceed if we have the dragged cat colliding with another cat
+                if (otherBody && potentialEater) {
+                    // Check rarity (ensure rarity property exists)
+                    const eaterRarity = potentialEater.rarity ?? -1; // Default to -1 if undefined
+                    const eatenRarity = otherBody.rarity ?? -1;
+
+                    // Check if eater has strictly higher rarity and hasn't reached max size
+                    if (eaterRarity > eatenRarity && (!MAX_CAT_SIZE || potentialEater.currentSize < MAX_CAT_SIZE)) {
+                        eatCat(potentialEater, otherBody);
+                    }
+                }
+            });
+        }
+
+        function eatCat(eaterBody, eatenBody) {
+            console.log(`Cat ${eaterBody.id} (Rarity ${eaterBody.rarity}) eating Cat ${eatenBody.id} (Rarity ${eatenBody.rarity})`);
+
+            // 1. Find and remove the eaten cat's data and element
+            const eatenIndex = cats.findIndex(catData => catData && catData.body === eatenBody);
+            if (eatenIndex > -1) {
+                const eatenData = cats[eatenIndex];
+                if (eatenData.element) {
+                    eatenData.element.remove(); // Remove DOM element
+                }
+                // Remove from tracked array *before* removing body
+                cats.splice(eatenIndex, 1);
+            } else {
+                console.warn("Could not find eaten cat data for element removal.");
+            }
+
+            // 2. Remove the eaten cat's body from the world
+            // Use setTimeout to avoid issues with modifying world during collision event
+            setTimeout(() => {
+                 if (world && Composite.get(world, eatenBody.id, 'body')) {
+                     World.remove(world, eatenBody);
+                 }
+            }, 0);
+
+
+            // 3. Increase the size of the eater
+            const currentSize = eaterBody.currentSize;
+            let newSize = currentSize * CAT_GROWTH_FACTOR;
+            // Apply max size limit if defined
+            if (MAX_CAT_SIZE) {
+                newSize = Math.min(newSize, MAX_CAT_SIZE);
+            }
+            const scaleFactor = newSize / currentSize;
+
+            // Only scale if there's a change and below max size
+            if (scaleFactor > 1) {
+                // Scale the physics body
+                Body.scale(eaterBody, scaleFactor, scaleFactor);
+                // Update the custom size property on the body
+                eaterBody.currentSize = newSize;
+
+                // 4. Update the size in the main cats array for visual update
+                const eaterIndex = cats.findIndex(catData => catData && catData.body === eaterBody);
+                if (eaterIndex > -1) {
+                    cats[eaterIndex].size = newSize;
+                    // Update element style immediately (visuals loop will also catch it)
+                    if(cats[eaterIndex].element) {
+                        cats[eaterIndex].element.style.width = `${newSize}px`;
+                        cats[eaterIndex].element.style.height = `${newSize}px`;
+                    }
+                } else {
+                    console.warn("Could not find eater cat data to update size.");
+                }
+                 // 5. Play eat sound
+                 playSound('eat');
+            } else {
+                 console.log(`Cat ${eaterBody.id} reached max size or no growth needed.`);
+            }
+        }
+
+
+        // --- Shockwave Function ---
+        // Function triggerShockwave (remains unchanged)
+        function triggerShockwave() {
+             if (!engine || !world || cats.length === 0) return;
+             scorePulseElement.classList.remove('pulsing'); void scorePulseElement.offsetWidth; scorePulseElement.classList.add('pulsing');
+             const scoreRect = scoreElement.getBoundingClientRect(); if (!scoreRect || scoreRect.width === 0) { console.error("Cannot get score bounds for shockwave."); return; }
+             const shockwaveCenter = Vector.create(scoreRect.left + scoreRect.width / 2, scoreRect.top + scoreRect.height / 2); const currentCats = [...cats];
+             currentCats.forEach(catData => {
+                 if (!catData || !catData.body || !catData.body.position || !world || !Composite.get(world, catData.body.id, 'body')) return;
+                 if (mouseConstraint && mouseConstraint.body === catData.body) return;
+                 const catBody = catData.body; const catPosition = catBody.position;
+                 try {
+                     const directionVector = Vector.sub(catPosition, shockwaveCenter); let distance = Vector.magnitude(directionVector);
+                     if (distance < 1) { Body.applyForce(catBody, catPosition, Vector.create((Math.random() - 0.5) * 0.001, -Math.random() * 0.005)); return; }
+                     distance = Math.max(distance, SHOCKWAVE_MIN_DISTANCE); const normalizedDirection = Vector.normalise(directionVector); let forceMagnitude = SHOCKWAVE_STRENGTH / distance; if (!isFinite(forceMagnitude)) forceMagnitude = 0;
+                     const forceVector = Vector.mult(normalizedDirection, forceMagnitude); Body.applyForce(catBody, catPosition, forceVector);
+                 } catch (error) { console.error("Error applying shockwave force:", error, catBody); }
+             });
+        }
+
+        // --- Core Game Logic Functions ---
+        // Function shuffleArray (remains unchanged)
+        function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
+        // Function loadQuestion (remains unchanged)
+        function loadQuestion() {
+             console.log("Loading question:", currentQuestionIndex);
+             if (!gameReady) { setTimeout(loadQuestion, 100); return; }
+             feedbackElement.textContent = '';
+             explanationOverlay.classList.remove('visible'); explanationTextElement.textContent = '';
+             setTimeout(() => { if (!explanationOverlay.classList.contains('visible')) explanationOverlay.style.display = 'none'; }, EXPLANATION_FADE_OUT_DURATION);
+             optionsElement.innerHTML = '';
+             if (questionsAvailable.length === 0) { console.warn("No more questions!"); questionElement.textContent = "¡Juego Terminado! Refresca para jugar de nuevo."; disableOptions(); return; }
+             currentQuestionIndex = currentQuestionIndex % questionsAvailable.length; const currentQuestion = questionsAvailable[currentQuestionIndex];
+             if (!currentQuestion) { console.error("Could not get question:", currentQuestionIndex); questionElement.textContent = "Error al cargar."; return; }
+             questionElement.textContent = currentQuestion.question;
+             currentQuestion.options.forEach((optionObj) => {
+                 const optionKey = Object.keys(optionObj)[0]; const optionText = optionObj[optionKey];
+                 const button = document.createElement('button'); button.textContent = optionText;
+                 button.className = 'option-button'; button.onclick = () => { initAudio(); handleAnswer(optionKey, currentQuestion.correct_answer); };
+                 optionsElement.appendChild(button);
+             });
+             enableOptions(); console.log("Question loaded.");
+        }
+        // Function handleAnswer (remains unchanged)
+        function handleAnswer(selectedKey, correctKey) {
+              console.log(`Handling answer: Selected=${selectedKey}, Correct=${correctKey}`);
+              disableOptions();
+              const currentQuestion = questionsAvailable[currentQuestionIndex]; let wasCorrect = false; isShowingExplanation = false;
+              let correctOptionText = ''; const correctOptionObj = currentQuestion.options.find(opt => Object.keys(opt)[0] === correctKey);
+              if (correctOptionObj) correctOptionText = correctOptionObj[correctKey]; else console.error("Could not find correct option text:", correctKey);
+              const explanation = currentQuestion.explanation || "";
+              if (selectedKey === correctKey) {
+                  wasCorrect = true; console.log("Correct!"); consecutiveCorrectAnswers++;
+                  const pointsEarned = 10 * consecutiveCorrectAnswers; score += pointsEarned;
+                  feedbackElement.textContent = `¡Correcto! +${pointsEarned} puntos`; feedbackElement.className = 'mt-4 text-lg h-8 text-green-400 font-bold';
+                  worldShakeIntensity = Math.min(MAX_WORLD_SHAKE, score * SCORE_SHAKE_FACTOR);
+                  updateVisuals(); fetchAndShowPexelsImage(); playSound('correct'); createFallingCat(); setTimeout(triggerShockwave, 50);
+              } else {
+                  wasCorrect = false; console.log("Incorrect."); consecutiveCorrectAnswers = 0; score = 0;
+                  feedbackElement.textContent = `Incorrecto. La respuesta era: ${correctOptionText}`; feedbackElement.className = 'mt-4 text-lg h-8 text-red-400 font-bold';
+                  if (worldShakeIntensity > 0) { worldShakeIntensity = 0; console.log("World shake reset."); }
+                  resetVisuals(); playSound('incorrect'); resetCats();
+              }
+              if (explanation) {
+                  isShowingExplanation = true; explanationTextElement.textContent = explanation; explanationOverlay.style.display = 'flex';
+                  requestAnimationFrame(() => { explanationOverlay.classList.add('visible'); }); console.log("Showing explanation.");
+              } else {
+                  console.log("No explanation, timer for next question.");
+                  setTimeout(() => {
+                      console.log("No explanation timer finished.");
+                      if(isShowingImage){ imageOverlay.style.opacity = '0'; setTimeout(() => imageOverlay.style.display = 'none', IMAGE_FADE_OUT_DURATION); isShowingImage = false; }
+                      loadQuestion();
+                  }, 1500);
+              }
+              scoreElement.textContent = score; currentQuestionIndex++;
+        }
+        // Function handleExplanationClick (remains unchanged)
+        function handleExplanationClick() {
+            if (isShowingExplanation) {
+                console.log("Explanation clicked.");
+                explanationOverlay.classList.remove('visible'); setTimeout(() => explanationOverlay.style.display = 'none', EXPLANATION_FADE_OUT_DURATION); isShowingExplanation = false;
+                if (isShowingImage) { imageOverlay.style.opacity = '0'; setTimeout(() => imageOverlay.style.display = 'none', IMAGE_FADE_OUT_DURATION); isShowingImage = false; }
+                loadQuestion();
+            }
+        }
+
+        // Function updateVisuals (remains unchanged)
+        function updateVisuals() {
+             const bgMaxStreak = 20; const bgStreakRatio = Math.min(consecutiveCorrectAnswers / bgMaxStreak, 1); const bgIntensity = bgStreakRatio * bgStreakRatio;
+             const hue = (consecutiveCorrectAnswers * 10) % 360; const saturation = bgIntensity * 80; const lightness = 10 + bgIntensity * 25;
+             bodyElement.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+             const flareStartStreak = 1, flareMaxStreak = 10; const flareIntensity = consecutiveCorrectAnswers < flareStartStreak ? 0 : Math.min((consecutiveCorrectAnswers - flareStartStreak + 1) / (flareMaxStreak - flareStartStreak + 1), 1);
+             rootElement.style.setProperty('--flare-intensity', flareIntensity);
+             const flareColor1 = `hsla(0, 0%, 100%, ${flareIntensity * 0.5})`, flareColor2 = `hsla(55, 100%, 70%, ${flareIntensity * 0.8})`, flareColor3 = `hsla(40, 100%, 60%, ${flareIntensity * 0.6})`, flareColor4 = `hsla(10, 100%, 55%, ${flareIntensity * 0.4})`;
+             const blur1 = `${5 + flareIntensity * 5}px`, blur2 = `${10 + flareIntensity * 10}px`, blur3 = `${15 + flareIntensity * 15}px`, blur4 = `${20 + flareIntensity * 20}px`;
+             const normalShadow = `0 0 ${blur1} ${flareColor1}, 0 0 ${blur2} ${flareColor2}, 0 0 ${blur3} ${flareColor3}, 0 0 ${blur4} ${flareColor4}`;
+             const pulseShadow = `0 0 ${blur1} ${flareColor1}, 0 0 ${parseFloat(blur2) * 1.2}px hsla(50, 100%, 75%, ${flareIntensity * 0.7}), 0 0 ${parseFloat(blur3) * 1.1}px hsla(35, 100%, 65%, ${flareIntensity * 0.5}), 0 0 ${parseFloat(blur4) * 1.0}px hsla(5, 100%, 60%, ${flareIntensity * 0.3})`;
+             rootElement.style.setProperty('--flare-shadow', normalShadow); rootElement.style.setProperty('--flare-shadow-pulse', pulseShadow);
+             if (flareIntensity > 0.3) scoreElement.classList.add('score-pulsing'); else { scoreElement.classList.remove('score-pulsing'); scoreElement.style.textShadow = normalShadow; }
+             const scoreIntensity = Math.min(consecutiveCorrectAnswers / 10, 1); const scoreLightness = 90 + scoreIntensity * 10; const scoreWeight = 700 + Math.floor(scoreIntensity * 2) * 100;
+             let scoreColor = (consecutiveCorrectAnswers < 2) ? `hsl(0, 0%, 95%)` : `hsl(${ (hue + 180) % 360 }, 80%, ${scoreLightness}%)`;
+             scoreElement.style.color = scoreColor; scoreElement.style.fontWeight = scoreWeight;
+             const elementGlowIntensity = consecutiveCorrectAnswers < ELEMENT_GLOW_START_STREAK ? 0 : Math.min((consecutiveCorrectAnswers - ELEMENT_GLOW_START_STREAK + 1) / (ELEMENT_GLOW_MAX_STREAK - ELEMENT_GLOW_START_STREAK + 1), 1);
+             rootElement.style.setProperty('--element-glow-intensity', elementGlowIntensity);
+             if (consecutiveCorrectAnswers > 0) {
+                 comboCounterElement.textContent = `x${consecutiveCorrectAnswers}`;
+                 const newFontSize = COMBO_BASE_FONT_SIZE_REM + (consecutiveCorrectAnswers -1) * COMBO_FONT_INCREMENT_REM;
+                 rootElement.style.setProperty('--combo-font-size', `${newFontSize}rem`);
+                 const comboHue = (consecutiveCorrectAnswers * COMBO_HUE_INCREMENT) % 360;
+                 comboCounterElement.style.color = `hsl(${comboHue}, 100%, 65%)`;
+                 comboCounterElement.style.display = 'block';
+             } else {
+                 comboCounterElement.textContent = '';
+                 rootElement.style.setProperty('--combo-font-size', `${COMBO_BASE_FONT_SIZE_REM}rem`);
+                 comboCounterElement.style.display = 'none';
+             }
+        }
+        // Function resetVisuals (remains unchanged)
+        function resetVisuals() {
+             bodyElement.style.backgroundColor = '#111827';
+             rootElement.style.setProperty('--flare-intensity', 0);
+             rootElement.style.setProperty('--element-glow-intensity', 0);
+             scoreElement.classList.remove('score-pulsing');
+             scoreElement.style.textShadow = '0 0 5px hsla(0, 0%, 100%, 0), 0 0 10px hsla(50, 100%, 50%, 0), 0 0 15px hsla(30, 100%, 50%, 0), 0 0 20px hsla(0, 100%, 50%, 0)';
+             scoreElement.style.color = 'hsl(0, 0%, 95%)'; scoreElement.style.fontWeight = '800';
+             comboCounterElement.textContent = '';
+             rootElement.style.setProperty('--combo-font-size', `${COMBO_BASE_FONT_SIZE_REM}rem`);
+             comboCounterElement.style.display = 'none';
+             comboCounterElement.style.color = 'transparent';
+        }
+        // Function disableOptions (remains unchanged)
+        function disableOptions() { const buttons = optionsElement.getElementsByTagName('button'); for (let button of buttons) { button.disabled = true; } }
+        // Function enableOptions (remains unchanged)
+        function enableOptions() { const buttons = optionsElement.getElementsByTagName('button'); for (let button of buttons) { button.disabled = false; } }
+
+        // --- Game Initialization ---
+        // Function initGame (remains unchanged)
+        function initGame() {
+             console.log("--- Initializing Game ---"); gameReady = false;
+             score = 0; consecutiveCorrectAnswers = 0; currentQuestionIndex = 0; worldShakeIntensity = 0;
+             scoreElement.textContent = score; questionsAvailable = [...questions]; shuffleArray(questionsAvailable);
+             resetVisuals();
+             imageOverlay.style.display = 'none'; imageOverlay.style.opacity = '0'; pexelsImage.src = ""; pexelsImage.onload = null; pexelsImage.onerror = null; pexelsImage.style.display = 'none';
+             scorePulseElement.classList.remove('pulsing'); explanationOverlay.style.display = 'none'; explanationOverlay.classList.remove('visible'); explanationTextElement.textContent = '';
+             isAudioInitialized = false; audioCtx = null; isShowingImage = false; isShowingExplanation = false;
+             try {
+                 setupPhysics(); resetCats(); fetchCatFaceImages(); gameReady = true; loadQuestion();
+                 console.log("--- Game Initialized Successfully ---");
+             } catch (error) {
+                 console.error("--- CRITICAL ERROR during init ---", error);
+                 feedbackElement.textContent = "Error fatal al iniciar. Refresca."; feedbackElement.className = 'mt-4 text-lg h-8 text-red-500 font-bold'; gameReady = false;
+             }
+        }
+
+        // --- Event Listeners ---
+        // Event listeners (remain unchanged)
+        window.onload = initGame;
+        explanationOverlay.addEventListener('click', handleExplanationClick);
+        // UPDATED: onunload removes collision listener
+        window.onunload = () => {
+             console.log("--- Unloading Game ---");
+             if (runner) Runner.stop(runner);
+             if (engine) {
+                 Events.off(engine, 'beforeUpdate', applyWorldShake);
+                 Events.off(engine, 'collisionStart', handleCatCollisions); // Remove collision listener
+                 if (mouseConstraint) { Composite.remove(world, mouseConstraint); console.log("Mouse constraint removed."); }
+                 Engine.clear(engine); engine = null; console.log("Physics engine cleared.");
+             }
+             if (animationFrameId) cancelAnimationFrame(animationFrameId); animationFrameId = null; window.removeEventListener('resize', handleResize);
+             explanationOverlay.removeEventListener('click', handleExplanationClick);
+             if (audioCtx && audioCtx.state !== 'closed') { audioCtx.close().catch(e => console.error("Error closing Audio:", e)); audioCtx = null; }
+             console.log("--- Game Unloaded ---");
+        };
+
+    </script>
+
+</body>
+</html>
+
+
+
